@@ -20,6 +20,7 @@ class HidEventLoop(threading.Thread):
     def __init__(self, context, events_endpoint, requests_endpoint):
         super(HidEventLoop, self).__init__()
         self._joysticks = dict()
+        self._joysticks_by_idx = dict()
         self._ctx = context
         self._events_endpoint = events_endpoint
         self._requests_endpoint = requests_endpoint
@@ -29,13 +30,24 @@ class HidEventLoop(threading.Thread):
         socket.bind(self._requests_endpoint)
 
         while True:
-            request = socket.recv_pyobj()
+            request, parameters = socket.recv_multipart()
 
-            if request['command'] == 'subscribe':
-                joystick = SDLJoystick.open(request['device_name'])
-                self._joysticks[joystick.instance_id] = joystick
+            if request == b'open':
+                device_name = parameters.decode('utf-8')
 
-                socket.send_pyobj(True)
+                device_index = SDLJoystick.find_device_index(device_name)
+                if device_index is None:
+                    raise HidEventLoopException("Unknown device : {}".format(device_name))
+
+                if device_index in self._joysticks_by_idx:
+                    joystick = self._joysticks_by_idx[device_index]
+                else:
+                    joystick = SDLJoystick.open(device_index)
+                    self._joysticks[joystick.instance_id] = joystick
+                    self._joysticks_by_idx[device_index] = joystick
+
+                socket.send_pyobj(joystick.full_state)
+
             else:
                 socket.send_pyobj(False)
 

@@ -1,5 +1,6 @@
-from njoy_core.hid_event_loop import HidEventLoop
 import zmq.green as zmq
+
+from njoy_core.hid_event_loop import HidEventLoop
 
 
 def main():
@@ -16,12 +17,19 @@ def main():
     requester = ctx.socket(zmq.REQ)
     requester.connect("inproc://hid_event_loop_requests")
 
+    controls = dict()
     for joystick in ["Joystick - HOTAS Warthog", "Throttle - HOTAS Warthog", "MFG Crosswind V2"]:
-        requester.send_pyobj({
-            'command': 'subscribe',
-            'device_name': joystick
-        })
-        answer = requester.recv_pyobj()
+        requester.send_multipart([b'open', joystick.encode('utf-8')])
+        full_state = requester.recv_pyobj()
+        if full_state is not None:
+            for ctrl_state in full_state:
+                ctrl_id = ctrl_state[0:3]
+                if ctrl_id in controls:
+                    print("Skipping duplicate control : {}".format(ctrl_id))
+                else:
+                    controls[ctrl_id] = ctrl_state
+
+    _tmp = sorted(controls.values(), key=lambda c: c[0:3])
 
     while hid_event_loop.is_alive():
         s = receiver.recv_string()

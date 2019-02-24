@@ -102,6 +102,14 @@ class SDLJoystick:
         return sdl2.SDL_JoystickGetHat(self._sdl_joystick, i)
 
     @property
+    def full_state(self):
+        instance_id = self.instance_id
+        return [(instance_id, 'axis', i, self.get_axis(i)) for i in range(self.nb_axes)] + \
+               [(instance_id, 'ball', i, self.get_ball(i)) for i in range(self.nb_balls)] + \
+               [(instance_id, 'button', i, self.get_button(i)) for i in range(self.nb_buttons)] + \
+               [(instance_id, 'hat', i, self.get_hat(i)) for i in range(self.nb_hats)]
+
+    @property
     def current_power_level(self):
         current_power_level = sdl2.SDL_JoystickCurrentPowerLevel(self._sdl_joystick)
         if current_power_level == sdl2.SDL_JOYSTICK_POWER_UNKNOWN:
