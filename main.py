@@ -1,6 +1,7 @@
 import zmq.green as zmq
 
 from njoy_core.hid_event_loop import HidEventLoop
+from njoy_core.messages import HidEvent
 
 
 def main():
@@ -32,8 +33,8 @@ def main():
     _tmp = sorted(controls.values(), key=lambda c: c[0:3])
 
     while hid_event_loop.is_alive():
-        s = receiver.recv_string()
-        print(s)
+        msg = HidEvent.recv(receiver)
+        print(str(msg))
 
 
 if __name__ == "__main__":

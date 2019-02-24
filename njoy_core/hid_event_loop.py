@@ -5,6 +5,7 @@ import sdl2.ext
 import zmq.green as zmq
 
 from njoy_core.io.sdl_joystick import SDLJoystick
+from njoy_core.messages import HidAxisEvent, HidBallEvent, HidButtonEvent, HidHatEvent
 
 
 class HidEventLoopException(Exception):
@@ -62,25 +63,25 @@ class HidEventLoop(threading.Thread):
                     raise HidEventLoopQuit()
 
                 elif event.type == sdl2.SDL_JOYAXISMOTION:
-                    socket.send_string("/{}/axes/{} = {}".format(event.jaxis.which,
-                                                                 event.jaxis.axis,
-                                                                 event.jaxis.value))
+                    HidAxisEvent(joystick_instance_id=event.jaxis.which,
+                                 ctrl_id=event.jaxis.axis,
+                                 value=event.jaxis.value).send(socket)
 
                 elif event.type == sdl2.SDL_JOYBALLMOTION:
-                    socket.send_string("/{}/balls/{} = ({}, {})".format(event.jball.which,
-                                                                        event.jball.ball,
-                                                                        event.jball.xrel,
-                                                                        event.jball.yrel))
+                    HidBallEvent(joystick_instance_id=event.jball.which,
+                                 ctrl_id=event.jball.ball,
+                                 dx=event.jball.xrel,
+                                 dy=event.jball.yrel).send(socket)
 
                 elif event.type in {sdl2.SDL_JOYBUTTONDOWN, sdl2.SDL_JOYBUTTONUP}:
-                    socket.send_string("/{}/buttons/{} = {}".format(event.jbutton.which,
-                                                                    event.jbutton.button,
-                                                                    event.jbutton.state))
+                    HidButtonEvent(joystick_instance_id=event.jbutton.which,
+                                   ctrl_id=event.jbutton.button,
+                                   state=event.jbutton.state).send(socket)
 
                 elif event.type == sdl2.SDL_JOYHATMOTION:
-                    socket.send_string("/{}/hats/{} = {}".format(event.jhat.which,
-                                                                 event.jhat.hat,
-                                                                 event.jhat.value))
+                    HidHatEvent(joystick_instance_id=event.jhat.which,
+                                ctrl_id=event.jhat.hat,
+                                value=event.jhat.value).send(socket)
 
     def run(self, *args, **kwargs):
         SDLJoystick.sdl_init()
