@@ -4,12 +4,13 @@ import zmq
 
 
 def main():
-    main_ctx = zmq.Context()
-    receiver = main_ctx.socket(zmq.PULL)
-    receiver.bind("inproc://main")
+    ctx = zmq.Context()
+    receiver = ctx.socket(zmq.SUB)
+    receiver.setsockopt(zmq.SUBSCRIBE, b'')
+    receiver.connect("inproc://hid_event_loop")
 
-    hid_event_loop = HidEventLoop(zmq_context=main_ctx,
-                                  zmq_end_point="inproc://main",
+    hid_event_loop = HidEventLoop(zmq_context=ctx,
+                                  zmq_end_point="inproc://hid_event_loop",
                                   monitored_devices={"Joystick - HOTAS Warthog",
                                                      "Throttle - HOTAS Warthog",
                                                      "MFG Crosswind V2"})

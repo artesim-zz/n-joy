@@ -60,7 +60,7 @@ class Joystick:
         return ['{:02x}'.format(guid.data[i]) for i in range(guid.data)]
 
     @classmethod
-    def open(cls, zmq_context, zmq_end_point, device_index):
+    def open(cls, device_index, zmq_context, zmq_end_point):
         by_index = {joy.device_index: joy for joy in __JOYSTICK_INSTANCES__.values()}
         if device_index in by_index:
             return by_index[device_index]
@@ -69,7 +69,7 @@ class Joystick:
         if not sdl_joystick:
             raise HidInputDeviceException(sdl2.SDL_GetError())
 
-        joystick = cls(zmq_context, zmq_end_point, device_index, sdl_joystick)
+        joystick = cls(sdl_joystick, device_index, zmq_context, zmq_end_point)
         __JOYSTICK_INSTANCES__[joystick.instance_id] = joystick
 
         return joystick
@@ -82,9 +82,9 @@ class Joystick:
     def is_attached(self):
         return sdl2.SDL_JoystickGetAttached(self._sdl_joystick) if self._sdl_joystick else False
 
-    def __init__(self, zmq_context, zmq_end_point, device_index, sdl_joystick):
+    def __init__(self, sdl_joystick, device_index, zmq_context, zmq_end_point):
         self._zmq_context = zmq_context
-        self._zmq_sender = self._zmq_init(zmq_end_point)
+        self._zmq_end_point = zmq_end_point
 
         self._device_index = device_index
         self._sdl_joystick = sdl_joystick
@@ -106,11 +106,6 @@ class Joystick:
 
     def __repr__(self):
         return "<InputDevice #{} {}>".format(self.instance_id, self.name)
-
-    def _zmq_init(self, end_point):
-        sender = self._zmq_context.socket(zmq.PUSH)
-        sender.connect(end_point)
-        return sender
 
     def _compute_axes(self):
         axes = dict()
@@ -213,47 +208,18 @@ class Joystick:
                 raise HidInputDeviceException(sdl2.SDL_GetError())
         return self._nb_hats
 
-    def handle_axis_event(self, axis_event):
-        self._axes[axis_event.axis] = axis_event.value
-        self._zmq_sender.send_string("{}:{}: Axis {} = {}".format(self,
-                                                                  axis_event.timestamp,
-                                                                  axis_event.axis,
-                                                                  axis_event.value))
-
-    def handle_ball_event(self, ball_event):
-        self._balls[ball_event.ball] = (ball_event.xrel, ball_event.yrel)
-        self._zmq_sender.send_string("{}:{}: Ball {} = {}".format(self,
-                                                                  ball_event.timestamp,
-                                                                  ball_event.ball,
-                                                                  (ball_event.xrel, ball_event.yrel)))
-
-    def handle_button_event(self, button_event):
-        self._buttons[button_event.button] = (button_event.state is sdl2.SDL_PRESSED)
-        self._zmq_sender.send_string("{}:{}: Button {} = {}".format(self,
-                                                                    button_event.timestamp,
-                                                                    button_event.button,
-                                                                    (button_event.state is sdl2.SDL_PRESSED)))
-
-    def handle_hat_event(self, hat_event):
-        self._hats[hat_event.hat] = hat_event.value
-        self._zmq_sender.send_string("{}:{}: Hat {} = {}".format(self,
-                                                                 hat_event.timestamp,
-                                                                 hat_event.hat,
-                                                                 hat_event.value))
-
 
 class HidEventLoop(threading.Thread):
     def __init__(self, zmq_context, zmq_end_point, monitored_devices):
         super(HidEventLoop, self).__init__()
-        self._zmq_context = zmq_context
-        self._zmq_end_point = zmq_end_point
-        self._zmq_sender = self._zmq_init(zmq_end_point)
+        self._ctx, self._out_end_point, self._out_socket = self._zmq_init(zmq_context, zmq_end_point)
         self._monitored_devices = monitored_devices
 
-    def _zmq_init(self, end_point):
-        sender = self._zmq_context.socket(zmq.PUSH)
-        sender.connect(end_point)
-        return sender
+    @staticmethod
+    def _zmq_init(context, end_point):
+        socket = context.socket(zmq.PUB)
+        socket.bind(end_point)
+        return context, end_point, socket
 
     def _sdl_init(self):
         sdl2.SDL_Init(sdl2.SDL_INIT_EVENTS | sdl2.SDL_INIT_JOYSTICK)
@@ -263,7 +229,7 @@ class HidEventLoop(threading.Thread):
 
         for device_name in self._monitored_devices:
             if device_name in device_index_of.keys():
-                Joystick.open(self._zmq_context, self._zmq_end_point, device_index_of[device_name])
+                Joystick.open(device_index_of[device_name], self._ctx, self._out_end_point)
 
     @staticmethod
     def _sdl_close():
@@ -282,29 +248,38 @@ class HidEventLoop(threading.Thread):
 
                     elif event.type == sdl2.SDL_JOYAXISMOTION:
                         if event.jaxis.which in __JOYSTICK_INSTANCES__:
-                            __JOYSTICK_INSTANCES__[event.jaxis.which].handle_axis_event(event.jaxis)
+                            self._out_socket.send_string("/{}/axes/{} = {}".format(event.jaxis.which,
+                                                                                   event.jaxis.axis,
+                                                                                   event.jaxis.value))
 
                     elif event.type == sdl2.SDL_JOYBALLMOTION:
                         if event.jball.which in __JOYSTICK_INSTANCES__:
-                            __JOYSTICK_INSTANCES__[event.jball.which].handle_ball_event(event.jball)
+                            self._out_socket.send_string("/{}/balls/{} = ({}, {})".format(event.jball.which,
+                                                                                          event.jball.ball,
+                                                                                          event.jball.xrel,
+                                                                                          event.jball.yrel))
 
                     elif event.type in {sdl2.SDL_JOYBUTTONDOWN, sdl2.SDL_JOYBUTTONUP}:
                         if event.jbutton.which in __JOYSTICK_INSTANCES__:
-                            __JOYSTICK_INSTANCES__[event.jbutton.which].handle_button_event(event.jbutton)
+                            self._out_socket.send_string("/{}/buttons/{} = {}".format(event.jbutton.which,
+                                                                                      event.jbutton.button,
+                                                                                      event.jbutton.state))
 
                     elif event.type == sdl2.SDL_JOYDEVICEADDED:
                         if event.jdevice.which in __JOYSTICK_INSTANCES__:
                             name = __JOYSTICK_INSTANCES__[event.jdevice.which].name
-                            self._zmq_sender.send_string("{}: Connected".format(name))
+                            self._out_socket.send_string("{}: Connected".format(name))
 
                     elif event.type == sdl2.SDL_JOYDEVICEREMOVED:
                         if event.jdevice.which in __JOYSTICK_INSTANCES__:
                             name = __JOYSTICK_INSTANCES__[event.jdevice.which].name
-                            self._zmq_sender.send_string("{}: Disconnected".format(name))
+                            self._out_socket.send_string("{}: Disconnected".format(name))
 
                     elif event.type == sdl2.SDL_JOYHATMOTION:
                         if event.jhat.which in __JOYSTICK_INSTANCES__:
-                            __JOYSTICK_INSTANCES__[event.jhat.which].handle_hat_event(event.jhat)
+                            self._out_socket.send_string("/{}/hats/{} = {}".format(event.jhat.which,
+                                                                                   event.jhat.hat,
+                                                                                   event.jhat.value))
 
                 sdl2.SDL_Delay(1)
 
