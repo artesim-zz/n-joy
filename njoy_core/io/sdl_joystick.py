@@ -9,6 +9,14 @@ class SDLJoystick:
     """OOP-ified wrapper around the SDL2 joystick interface"""
 
     @staticmethod
+    def sdl_init():
+        sdl2.SDL_Init(sdl2.SDL_INIT_EVENTS | sdl2.SDL_INIT_JOYSTICK)
+
+    @staticmethod
+    def sdl_quit():
+        sdl2.SDL_Quit()
+
+    @staticmethod
     def get_event_state():
         return SDLJoystick.set_event_state(sdl2.SDL_QUERY)
 
@@ -45,15 +53,23 @@ class SDLJoystick:
         return name.decode('utf-8')
 
     @staticmethod
+    def find_device_index(device_name):
+        for i in range(SDLJoystick.nb_joysticks()):
+            if device_name == SDLJoystick.device_name(i):
+                return i
+
+    @staticmethod
     def to_guid_str(guid):
         return ['{:02x}'.format(guid.data[i]) for i in range(guid.data)]
 
     @classmethod
-    def open(cls, device_index):
-        sdl_joystick = sdl2.SDL_JoystickOpen(device_index)
+    def open(cls, device_name_or_index):
+        sdl_joystick = sdl2.SDL_JoystickOpen(device_name_or_index
+                                             if isinstance(device_name_or_index, int)
+                                             else SDLJoystick.find_device_index(device_name_or_index))
         if not sdl_joystick:
             raise SdlJoystickException(sdl2.SDL_GetError())
-        return cls(sdl_joystick, device_index)
+        return cls(sdl_joystick, device_name_or_index)
 
     def close(self):
         sdl2.SDL_JoystickClose(self._sdl_joystick)
