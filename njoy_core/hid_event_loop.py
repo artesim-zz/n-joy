@@ -6,12 +6,12 @@ import zmq
 from njoy_core.io.sdl_joystick import SDLJoystick
 
 
-class HidInputDeviceException(Exception):
+class HidEventLoopException(Exception):
     """Top-level class for all exceptions raised from this module."""
     pass
 
 
-class HidInputDeviceQuit(HidInputDeviceException):
+class HidEventLoopQuit(HidEventLoopException):
     pass
 
 
@@ -51,7 +51,7 @@ class HidEventLoop(threading.Thread):
             while True:
                 for event in sdl2.ext.get_events():
                     if event.type == sdl2.SDL_QUIT:
-                        raise HidInputDeviceQuit()
+                        raise HidEventLoopQuit()
 
                     elif event.type == sdl2.SDL_JOYAXISMOTION:
                         if event.jaxis.which in self._joysticks:

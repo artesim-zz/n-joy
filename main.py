@@ -1,5 +1,4 @@
-from njoy_core.io.hid_input import HidEventLoop
-from njoy_core.io.virtual_output import OutputDevice
+from njoy_core.hid_event_loop import HidEventLoop
 import zmq
 
 
