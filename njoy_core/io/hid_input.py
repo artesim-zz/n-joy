@@ -13,9 +13,6 @@ class HidInputDeviceQuit(HidInputDeviceException):
     pass
 
 
-__JOYSTICK_INSTANCES__ = dict()
-
-
 class Joystick:
     """OOP-ified wrapper around the SDL2 library"""
 
@@ -61,21 +58,12 @@ class Joystick:
 
     @classmethod
     def open(cls, device_index, zmq_context, zmq_end_point):
-        by_index = {joy.device_index: joy for joy in __JOYSTICK_INSTANCES__.values()}
-        if device_index in by_index:
-            return by_index[device_index]
-
         sdl_joystick = sdl2.SDL_JoystickOpen(device_index)
         if not sdl_joystick:
             raise HidInputDeviceException(sdl2.SDL_GetError())
-
-        joystick = cls(sdl_joystick, device_index, zmq_context, zmq_end_point)
-        __JOYSTICK_INSTANCES__[joystick.instance_id] = joystick
-
-        return joystick
+        return cls(sdl_joystick, device_index, zmq_context, zmq_end_point)
 
     def close(self):
-        del __JOYSTICK_INSTANCES__[self.instance_id]
         sdl2.SDL_JoystickClose(self._sdl_joystick)
         self._sdl_joystick = None
 
@@ -212,8 +200,8 @@ class Joystick:
 class HidEventLoop(threading.Thread):
     def __init__(self, zmq_context, zmq_end_point, monitored_devices):
         super(HidEventLoop, self).__init__()
+        self._joysticks = monitored_devices
         self._ctx, self._out_end_point, self._out_socket = self._zmq_init(zmq_context, zmq_end_point)
-        self._monitored_devices = monitored_devices
 
     @staticmethod
     def _zmq_init(context, end_point):
@@ -227,14 +215,15 @@ class HidEventLoop(threading.Thread):
         device_index_of = {Joystick.device_name(device_index): device_index
                            for device_index in range(Joystick.nb_joysticks())}
 
-        for device_name in self._monitored_devices:
-            if device_name in device_index_of.keys():
-                Joystick.open(device_index_of[device_name], self._ctx, self._out_end_point)
+        self._joysticks = {joystick.instance_id: joystick
+                           for joystick in [Joystick.open(device_index_of[device_name], self._ctx, self._out_end_point)
+                                            for device_name in self._joysticks
+                                            if device_name in device_index_of.keys()]}
 
-    @staticmethod
-    def _sdl_close():
-        for joystick in __JOYSTICK_INSTANCES__.values():
+    def _sdl_close(self):
+        for joystick in self._joysticks.values():
             joystick.close()
+        self._joysticks = None
         sdl2.SDL_Quit()
 
     def run(self, *args, **kwargs):
@@ -247,36 +236,36 @@ class HidEventLoop(threading.Thread):
                         raise HidInputDeviceQuit()
 
                     elif event.type == sdl2.SDL_JOYAXISMOTION:
-                        if event.jaxis.which in __JOYSTICK_INSTANCES__:
+                        if event.jaxis.which in self._joysticks:
                             self._out_socket.send_string("/{}/axes/{} = {}".format(event.jaxis.which,
                                                                                    event.jaxis.axis,
                                                                                    event.jaxis.value))
 
                     elif event.type == sdl2.SDL_JOYBALLMOTION:
-                        if event.jball.which in __JOYSTICK_INSTANCES__:
+                        if event.jball.which in self._joysticks:
                             self._out_socket.send_string("/{}/balls/{} = ({}, {})".format(event.jball.which,
                                                                                           event.jball.ball,
                                                                                           event.jball.xrel,
                                                                                           event.jball.yrel))
 
                     elif event.type in {sdl2.SDL_JOYBUTTONDOWN, sdl2.SDL_JOYBUTTONUP}:
-                        if event.jbutton.which in __JOYSTICK_INSTANCES__:
+                        if event.jbutton.which in self._joysticks:
                             self._out_socket.send_string("/{}/buttons/{} = {}".format(event.jbutton.which,
                                                                                       event.jbutton.button,
                                                                                       event.jbutton.state))
 
                     elif event.type == sdl2.SDL_JOYDEVICEADDED:
-                        if event.jdevice.which in __JOYSTICK_INSTANCES__:
-                            name = __JOYSTICK_INSTANCES__[event.jdevice.which].name
+                        if event.jdevice.which in self._joysticks:
+                            name = self._joysticks[event.jdevice.which].name
                             self._out_socket.send_string("{}: Connected".format(name))
 
                     elif event.type == sdl2.SDL_JOYDEVICEREMOVED:
-                        if event.jdevice.which in __JOYSTICK_INSTANCES__:
-                            name = __JOYSTICK_INSTANCES__[event.jdevice.which].name
+                        if event.jdevice.which in self._joysticks:
+                            name = self._joysticks[event.jdevice.which].name
                             self._out_socket.send_string("{}: Disconnected".format(name))
 
                     elif event.type == sdl2.SDL_JOYHATMOTION:
-                        if event.jhat.which in __JOYSTICK_INSTANCES__:
+                        if event.jhat.which in self._joysticks:
                             self._out_socket.send_string("/{}/hats/{} = {}".format(event.jhat.which,
                                                                                    event.jhat.hat,
                                                                                    event.jhat.value))
