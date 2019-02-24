@@ -19,7 +19,10 @@ def main():
     requester.connect("inproc://hid_event_loop_requests")
 
     controls = dict()
-    for joystick in ["Joystick - HOTAS Warthog", "Throttle - HOTAS Warthog", "MFG Crosswind V2"]:
+    for joystick in ["Joystick - HOTAS Warthog",
+                     "Throttle - HOTAS Warthog",
+                     "MFG Crosswind V2",
+                     "Saitek Pro Flight Throttle Quadrant"]:
         requester.send_multipart([b'open', joystick.encode('utf-8')])
         full_state = requester.recv_pyobj()
         if full_state is not None:
