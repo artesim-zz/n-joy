@@ -1,7 +1,7 @@
 import zmq.green as zmq
 
 from njoy_core.hid_event_loop import HidEventLoop
-from njoy_core.messages import HidEvent
+from njoy_core.messages import Message, HidDeviceFullStateMsg
 
 
 def main():
@@ -24,19 +24,18 @@ def main():
                      "MFG Crosswind V2",
                      "Saitek Pro Flight Throttle Quadrant"]:
         requester.send_multipart([b'open', joystick.encode('utf-8')])
-        full_state = requester.recv_pyobj()
-        if full_state is not None:
-            for ctrl_state in full_state:
-                ctrl_id = ctrl_state[0:3]
-                if ctrl_id in controls:
-                    print("Skipping duplicate control : {}".format(ctrl_id))
+        full_state_msg = Message.recv(requester)
+        if isinstance(full_state_msg, HidDeviceFullStateMsg):
+            for ctrl_event in full_state_msg.control_events:
+                if ctrl_event in controls:
+                    print("Skipping duplicate control : {}".format(ctrl_event))
                 else:
-                    controls[ctrl_id] = ctrl_state
+                    controls[ctrl_event] = ctrl_event
 
-    _tmp = sorted(controls.values(), key=lambda c: c[0:3])
+    _tmp = sorted(controls.values())
 
     while hid_event_loop.is_alive():
-        msg = HidEvent.recv(receiver)
+        msg = Message.recv(receiver)
         print(str(msg))
 
 

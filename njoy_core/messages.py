@@ -7,65 +7,33 @@ class MessageException(Exception):
 
 
 @enum.unique
-class HidControlType(enum.IntEnum):
-    AXIS = 0
-    BALL = 1
-    BUTTON = 2
-    HAT = 3
+class MessageType(enum.IntEnum):
+    HID_FULL_STATE = 0
+    HID_AXIS_EVENT = 1
+    HID_BALL_EVENT = 2
+    HID_BUTTON_EVENT = 3
+    HID_HAT_EVENT = 4
 
 
-class HidEvent:
-    __TOPIC_STRUCT__ = struct.Struct('>IBI')
-
-    def __init__(self, joystick_instance_id, ctrl_type, ctrl_id):
-        self._instance_id = joystick_instance_id
-        self._type = ctrl_type
-        self._id = ctrl_id
-
-    @property
-    def instance_id(self):
-        return self._instance_id
-
-    @property
-    def type(self):
-        return self._type
-
-    @property
-    def id(self):
-        return self._id
+class Message:
+    __HEADER_PACKER__ = struct.Struct('>B')
 
     @property
     def msg_parts(self):
-        return [self.__TOPIC_STRUCT__.pack(self._instance_id, self._type, self._id)]
+        raise NotImplementedError
 
     @classmethod
     def from_msg_parts(cls, msg_parts):
-        instance_id, ctrl_type, ctrl_id = cls.__TOPIC_STRUCT__.unpack(msg_parts[0])
+        msg_type, = cls.__HEADER_PACKER__.unpack(msg_parts[0][0:cls.__HEADER_PACKER__.size])
 
-        if ctrl_type == HidControlType.AXIS:
-            return HidAxisEvent(joystick_instance_id=instance_id,
-                                ctrl_id=ctrl_id,
-                                value=HidAxisEvent.from_value_parts(*msg_parts[1:]))
+        if msg_type == MessageType.HID_FULL_STATE:
+            return HidDeviceFullStateMsg.from_msg_parts(msg_parts)
 
-        elif ctrl_type == HidControlType.BALL:
-            dx, dy = HidBallEvent.from_value_parts(*msg_parts[1:])
-            return HidBallEvent(joystick_instance_id=instance_id,
-                                ctrl_id=ctrl_id,
-                                dx=dx,
-                                dy=dy)
-
-        elif ctrl_type == HidControlType.BUTTON:
-            return HidButtonEvent(joystick_instance_id=instance_id,
-                                  ctrl_id=ctrl_id,
-                                  state=HidButtonEvent.from_value_parts(*msg_parts[1:]))
-
-        elif ctrl_type == HidControlType.HAT:
-            return HidHatEvent(joystick_instance_id=instance_id,
-                               ctrl_id=ctrl_id,
-                               value=HidHatEvent.from_value_parts(*msg_parts[1:]))
-
-        else:
-            raise MessageException("Invalid HidControlType")
+        elif msg_type in {MessageType.HID_AXIS_EVENT,
+                          MessageType.HID_BALL_EVENT,
+                          MessageType.HID_BUTTON_EVENT,
+                          MessageType.HID_HAT_EVENT}:
+            return HidEvent.from_msg_parts(msg_parts)
 
     def send(self, socket):
         socket.send_multipart(self.msg_parts)
@@ -75,15 +43,136 @@ class HidEvent:
         return cls.from_msg_parts(socket.recv_multipart())
 
 
-class HidAxisEvent(HidEvent):
-    __VALUE_STRUCT__ = struct.Struct('>i')
+class HidDeviceFullStateMsg(Message):
+    __HEADER_PACKER__ = struct.Struct('>BI')
 
-    def __init__(self, joystick_instance_id, ctrl_id, value):
-        super(HidAxisEvent, self).__init__(joystick_instance_id, HidControlType.AXIS, ctrl_id)
+    def __init__(self, device_id, device_full_state=None, decoded_control_events=None):
+        self._device_id = device_id
+
+        if device_full_state is not None:
+            self._control_events = list()
+            for ctrl_type, ctrl_id, value in device_full_state:
+                if ctrl_type == 'axis':
+                    self._control_events.append(HidAxisEvent(device_id=device_id,
+                                                             ctrl_id=ctrl_id,
+                                                             value=value))
+                elif ctrl_type == 'ball':
+                    self._control_events.append(HidBallEvent(device_id=device_id,
+                                                             ctrl_id=ctrl_id,
+                                                             dx=value[0],
+                                                             dy=value[1]))
+                elif ctrl_type == 'button':
+                    self._control_events.append(HidButtonEvent(device_id=device_id,
+                                                               ctrl_id=ctrl_id,
+                                                               state=value))
+                elif ctrl_type == 'hat':
+                    self._control_events.append(HidHatEvent(device_id=device_id,
+                                                            ctrl_id=ctrl_id,
+                                                            value=value))
+                else:
+                    raise MessageException("Unknown control type : {}".format(ctrl_type))
+
+        else:
+            self._control_events = decoded_control_events
+
+    def __repr__(self):
+        return '<HidDeviceFullState: {} ({} controls)>'.format(self._device_id, len(self._control_events))
+
+    @property
+    def device_id(self):
+        return self._device_id
+
+    @property
+    def control_events(self):
+        return self._control_events
+
+    @property
+    def msg_parts(self):
+        msg_parts = [self.__HEADER_PACKER__.pack(MessageType.HID_FULL_STATE, self._device_id)]
+        for control_event in self._control_events:
+            msg_parts.extend(control_event.msg_parts)
+        return msg_parts
+
+    @classmethod
+    def from_msg_parts(cls, msg_parts):
+        _, device_id = cls.__HEADER_PACKER__.unpack(msg_parts[0])
+        return cls(device_id=device_id,
+                   decoded_control_events=[Message.from_msg_parts(msg_parts[i:i+2])
+                                           for i in range(1, len(msg_parts) - 1, 2)])
+
+
+class HidEvent(Message):
+    __HEADER_PACKER__ = struct.Struct('>BII')
+
+    def __init__(self, device_id, ctrl_id):
+        self._device_id = device_id
+        self._ctrl_id = ctrl_id
+
+    @property
+    def as_key(self):
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(self.as_key)
+
+    def __lt__(self, other):
+        return self.as_key < other.as_key
+
+    @property
+    def device_id(self):
+        return self._device_id
+
+    @property
+    def ctrl_id(self):
+        return self._ctrl_id
+
+    @property
+    def msg_parts(self):
+        raise NotImplementedError
+
+    @classmethod
+    def from_msg_parts(cls, msg_parts):
+        msg_type, device_id, ctrl_id = cls.__HEADER_PACKER__.unpack(msg_parts[0])
+
+        if msg_type == MessageType.HID_AXIS_EVENT:
+            return HidAxisEvent(device_id=device_id,
+                                ctrl_id=ctrl_id,
+                                value=HidAxisEvent.from_value_parts(*msg_parts[1:]))
+
+        elif msg_type == MessageType.HID_BALL_EVENT:
+            dx, dy = HidBallEvent.from_value_parts(*msg_parts[1:])
+            return HidBallEvent(device_id=device_id,
+                                ctrl_id=ctrl_id,
+                                dx=dx,
+                                dy=dy)
+
+        elif msg_type == MessageType.HID_BUTTON_EVENT:
+            return HidButtonEvent(device_id=device_id,
+                                  ctrl_id=ctrl_id,
+                                  state=HidButtonEvent.from_value_parts(*msg_parts[1:]))
+
+        elif msg_type == MessageType.HID_HAT_EVENT:
+            return HidHatEvent(device_id=device_id,
+                               ctrl_id=ctrl_id,
+                               value=HidHatEvent.from_value_parts(*msg_parts[1:]))
+
+        else:
+            raise MessageException("Invalid Message Type")
+
+
+class HidAxisEvent(HidEvent):
+    __VALUE_PACKER__ = struct.Struct('>i')
+
+    def __init__(self, device_id, ctrl_id, value):
+        super(HidAxisEvent, self).__init__(device_id, ctrl_id)
         self._value = value
 
     def __repr__(self):
-        return '<HidAxisEvent: /{}/axis/{} = {}>'.format(self._instance_id, self._id, self._value)
+        return '<HidAxisEvent: /{}/axis/{} = {}>'.format(self._device_id, self._ctrl_id, self._value)
+
+    @property
+    def as_key(self):
+        return self._device_id, 'axis', self._ctrl_id
 
     @property
     def value(self):
@@ -91,26 +180,30 @@ class HidAxisEvent(HidEvent):
 
     @property
     def msg_parts(self):
-        topic, = super(HidAxisEvent, self).msg_parts
-        return [topic, self.__VALUE_STRUCT__.pack(self._value)]
+        return [self.__HEADER_PACKER__.pack(MessageType.HID_AXIS_EVENT, self._device_id, self._ctrl_id),
+                self.__VALUE_PACKER__.pack(self._value)]
 
     @classmethod
     def from_value_parts(cls, value_part):
-        value, = cls.__VALUE_STRUCT__.unpack(value_part)
+        value, = cls.__VALUE_PACKER__.unpack(value_part)
         return value
 
 
 class HidBallEvent(HidEvent):
-    __VALUE_STRUCT__ = struct.Struct('>ii')
+    __VALUE_PACKER__ = struct.Struct('>ii')
 
-    def __init__(self, joystick_instance_id, ctrl_id, dx, dy):
-        super(HidBallEvent, self).__init__(joystick_instance_id, HidControlType.BALL, ctrl_id)
+    def __init__(self, device_id, ctrl_id, dx, dy):
+        super(HidBallEvent, self).__init__(device_id, ctrl_id)
         self._dx = dx
         self._dy = dy
 
     def __repr__(self):
-        return '<HidBallEvent: /{}/ball/{} = ({}, {})>'.format(self._instance_id,
-                                                               self._id, self._dx, self._dy)
+        return '<HidBallEvent: /{}/ball/{} = ({}, {})>'.format(self._device_id,
+                                                               self._ctrl_id, self._dx, self._dy)
+
+    @property
+    def as_key(self):
+        return self._device_id, 'ball', self._ctrl_id
 
     @property
     def dx(self):
@@ -122,24 +215,28 @@ class HidBallEvent(HidEvent):
 
     @property
     def msg_parts(self):
-        topic, = super(HidBallEvent, self).msg_parts
-        return [topic, self.__VALUE_STRUCT__.pack(self._dx, self._dy)]
+        return [self.__HEADER_PACKER__.pack(MessageType.HID_BALL_EVENT, self._device_id, self._ctrl_id),
+                self.__VALUE_PACKER__.pack(self._dx, self._dy)]
 
     @classmethod
     def from_value_parts(cls, value_part):
-        dx, dy, = cls.__VALUE_STRUCT__.unpack(value_part)
+        dx, dy, = cls.__VALUE_PACKER__.unpack(value_part)
         return dx, dy
 
 
 class HidButtonEvent(HidEvent):
-    __VALUE_STRUCT__ = struct.Struct('>?')
+    __VALUE_PACKER__ = struct.Struct('>?')
 
-    def __init__(self, joystick_instance_id, ctrl_id, state):
-        super(HidButtonEvent, self).__init__(joystick_instance_id, HidControlType.BUTTON, ctrl_id)
+    def __init__(self, device_id, ctrl_id, state):
+        super(HidButtonEvent, self).__init__(device_id, ctrl_id)
         self._state = state
 
     def __repr__(self):
-        return '<HidButtonEvent: /{}/button/{} = {}>'.format(self._instance_id, self._id, self._state)
+        return '<HidButtonEvent: /{}/button/{} = {}>'.format(self._device_id, self._ctrl_id, self._state)
+
+    @property
+    def as_key(self):
+        return self._device_id, 'button', self._ctrl_id
 
     @property
     def state(self):
@@ -147,24 +244,28 @@ class HidButtonEvent(HidEvent):
 
     @property
     def msg_parts(self):
-        topic, = super(HidButtonEvent, self).msg_parts
-        return [topic, self.__VALUE_STRUCT__.pack(self._state)]
+        return [self.__HEADER_PACKER__.pack(MessageType.HID_BUTTON_EVENT, self._device_id, self._ctrl_id),
+                self.__VALUE_PACKER__.pack(self._state)]
 
     @classmethod
     def from_value_parts(cls, value_part):
-        state, = cls.__VALUE_STRUCT__.unpack(value_part)
+        state, = cls.__VALUE_PACKER__.unpack(value_part)
         return state
 
 
 class HidHatEvent(HidEvent):
-    __VALUE_STRUCT__ = struct.Struct('>B')
+    __VALUE_PACKER__ = struct.Struct('>B')
 
-    def __init__(self, joystick_instance_id, ctrl_id, value):
-        super(HidHatEvent, self).__init__(joystick_instance_id, HidControlType.HAT, ctrl_id)
+    def __init__(self, device_id, ctrl_id, value):
+        super(HidHatEvent, self).__init__(device_id, ctrl_id)
         self._value = value
 
     def __repr__(self):
-        return '<HidHatEvent: /{}/hat/{} = {}>'.format(self._instance_id, self._id, self._value)
+        return '<HidHatEvent: /{}/hat/{} = {}>'.format(self._device_id, self._ctrl_id, self._value)
+
+    @property
+    def as_key(self):
+        return self._device_id, 'hat', self._ctrl_id
 
     @property
     def value(self):
@@ -172,12 +273,12 @@ class HidHatEvent(HidEvent):
 
     @property
     def msg_parts(self):
-        topic, = super(HidHatEvent, self).msg_parts
-        return [topic, self.__VALUE_STRUCT__.pack(self._value)]
+        return [self.__HEADER_PACKER__.pack(MessageType.HID_HAT_EVENT, self._device_id, self._ctrl_id),
+                self.__VALUE_PACKER__.pack(self._value)]
 
     @classmethod
     def from_value_parts(cls, value_part):
-        value, = cls.__VALUE_STRUCT__.unpack(value_part)
+        value, = cls.__VALUE_PACKER__.unpack(value_part)
         return value
 
 # EOF

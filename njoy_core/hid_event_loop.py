@@ -5,7 +5,7 @@ import sdl2.ext
 import zmq.green as zmq
 
 from njoy_core.io.sdl_joystick import SDLJoystick
-from njoy_core.messages import HidAxisEvent, HidBallEvent, HidButtonEvent, HidHatEvent
+from njoy_core.messages import HidDeviceFullStateMsg, HidAxisEvent, HidBallEvent, HidButtonEvent, HidHatEvent
 
 
 class HidEventLoopException(Exception):
@@ -47,10 +47,11 @@ class HidEventLoop(threading.Thread):
                     self._joysticks[joystick.instance_id] = joystick
                     self._joysticks_by_idx[device_index] = joystick
 
-                socket.send_pyobj(joystick.full_state)
+                HidDeviceFullStateMsg(device_id=joystick.instance_id,
+                                      device_full_state=joystick.full_state).send(socket)
 
             else:
-                socket.send_pyobj(False)
+                raise HidEventLoopException("Unknown request : {}".format(request))
 
     def _event_loop(self):
         socket = self._ctx.socket(zmq.PUB)
@@ -63,23 +64,23 @@ class HidEventLoop(threading.Thread):
                     raise HidEventLoopQuit()
 
                 elif event.type == sdl2.SDL_JOYAXISMOTION:
-                    HidAxisEvent(joystick_instance_id=event.jaxis.which,
+                    HidAxisEvent(device_id=event.jaxis.which,
                                  ctrl_id=event.jaxis.axis,
                                  value=event.jaxis.value).send(socket)
 
                 elif event.type == sdl2.SDL_JOYBALLMOTION:
-                    HidBallEvent(joystick_instance_id=event.jball.which,
+                    HidBallEvent(device_id=event.jball.which,
                                  ctrl_id=event.jball.ball,
                                  dx=event.jball.xrel,
                                  dy=event.jball.yrel).send(socket)
 
                 elif event.type in {sdl2.SDL_JOYBUTTONDOWN, sdl2.SDL_JOYBUTTONUP}:
-                    HidButtonEvent(joystick_instance_id=event.jbutton.which,
+                    HidButtonEvent(device_id=event.jbutton.which,
                                    ctrl_id=event.jbutton.button,
                                    state=event.jbutton.state).send(socket)
 
                 elif event.type == sdl2.SDL_JOYHATMOTION:
-                    HidHatEvent(joystick_instance_id=event.jhat.which,
+                    HidHatEvent(device_id=event.jhat.which,
                                 ctrl_id=event.jhat.hat,
                                 value=event.jhat.value).send(socket)
 
