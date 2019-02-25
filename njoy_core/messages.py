@@ -161,7 +161,7 @@ class HidEvent(Message):
 
 
 class HidAxisEvent(HidEvent):
-    __VALUE_PACKER__ = struct.Struct('>i')
+    __VALUE_PACKER__ = struct.Struct('>h')
 
     def __init__(self, device_id, ctrl_id, value):
         super(HidAxisEvent, self).__init__(device_id, ctrl_id)
@@ -190,7 +190,7 @@ class HidAxisEvent(HidEvent):
 
 
 class HidBallEvent(HidEvent):
-    __VALUE_PACKER__ = struct.Struct('>ii')
+    __VALUE_PACKER__ = struct.Struct('>hh')
 
     def __init__(self, device_id, ctrl_id, dx, dy):
         super(HidBallEvent, self).__init__(device_id, ctrl_id)
