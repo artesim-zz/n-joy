@@ -179,9 +179,12 @@ class HidAxisEvent(HidEvent):
         return self._value
 
     @property
+    def msg_header(self):
+        return self.__HEADER_PACKER__.pack(MessageType.HID_AXIS_EVENT, self._device_id, self._ctrl_id)
+
+    @property
     def msg_parts(self):
-        return [self.__HEADER_PACKER__.pack(MessageType.HID_AXIS_EVENT, self._device_id, self._ctrl_id),
-                self.__VALUE_PACKER__.pack(self._value)]
+        return [self.msg_header, self.__VALUE_PACKER__.pack(self._value)]
 
     @classmethod
     def from_value_parts(cls, value_part):
@@ -214,9 +217,12 @@ class HidBallEvent(HidEvent):
         return self._dy
 
     @property
+    def msg_header(self):
+        return self.__HEADER_PACKER__.pack(MessageType.HID_BALL_EVENT, self._device_id, self._ctrl_id)
+
+    @property
     def msg_parts(self):
-        return [self.__HEADER_PACKER__.pack(MessageType.HID_BALL_EVENT, self._device_id, self._ctrl_id),
-                self.__VALUE_PACKER__.pack(self._dx, self._dy)]
+        return [self.msg_header, self.__VALUE_PACKER__.pack(self._dx, self._dy)]
 
     @classmethod
     def from_value_parts(cls, value_part):
@@ -243,9 +249,12 @@ class HidButtonEvent(HidEvent):
         return self._state
 
     @property
+    def msg_header(self):
+        return self.__HEADER_PACKER__.pack(MessageType.HID_BUTTON_EVENT, self._device_id, self._ctrl_id)
+
+    @property
     def msg_parts(self):
-        return [self.__HEADER_PACKER__.pack(MessageType.HID_BUTTON_EVENT, self._device_id, self._ctrl_id),
-                self.__VALUE_PACKER__.pack(self._state)]
+        return [self.msg_header, self.__VALUE_PACKER__.pack(self._state)]
 
     @classmethod
     def from_value_parts(cls, value_part):
@@ -272,9 +281,12 @@ class HidHatEvent(HidEvent):
         return self._value
 
     @property
+    def msg_header(self):
+        return self.__HEADER_PACKER__.pack(MessageType.HID_HAT_EVENT, self._device_id, self._ctrl_id)
+
+    @property
     def msg_parts(self):
-        return [self.__HEADER_PACKER__.pack(MessageType.HID_HAT_EVENT, self._device_id, self._ctrl_id),
-                self.__VALUE_PACKER__.pack(self._value)]
+        return [self.msg_header, self.__VALUE_PACKER__.pack(self._value)]
 
     @classmethod
     def from_value_parts(cls, value_part):

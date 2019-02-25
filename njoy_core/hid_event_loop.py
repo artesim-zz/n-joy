@@ -1,7 +1,7 @@
 import gevent
-import threading
 import sdl2
 import sdl2.ext
+import threading
 import zmq.green as zmq
 
 from njoy_core.io.sdl_joystick import SDLJoystick
@@ -25,6 +25,18 @@ class HidEventLoop(threading.Thread):
         self._ctx = context
         self._events_endpoint = events_endpoint
         self._requests_endpoint = requests_endpoint
+
+    @property
+    def ctx(self):
+        return self._ctx
+
+    @property
+    def events_endpoint(self):
+        return self._events_endpoint
+
+    @property
+    def requests_endpoint(self):
+        return self._requests_endpoint
 
     def _requests_handler(self):
         socket = self._ctx.socket(zmq.REP)
@@ -84,12 +96,12 @@ class HidEventLoop(threading.Thread):
                                 ctrl_id=event.jhat.hat,
                                 value=event.jhat.value).send(socket)
 
-    def run(self, *args, **kwargs):
+    def run(self):
         SDLJoystick.sdl_init()
 
-        requests_server = gevent.spawn(self._requests_handler)
+        requests_handler = gevent.spawn(self._requests_handler)
         event_loop = gevent.spawn(self._event_loop)
-        gevent.joinall([requests_server, event_loop])
+        gevent.joinall([requests_handler, event_loop])
 
         for joystick in self._joysticks.values():
             joystick.close()
