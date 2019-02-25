@@ -3,7 +3,7 @@ import threading
 import zmq.green as zmq
 
 from njoy_core import controls
-from njoy_core.messages import Message, HidDeviceFullStateMsg
+from njoy_core.messages import Message, HidRequest, HidDeviceFullStateReply
 
 
 class ControlPoolException(Exception):
@@ -35,9 +35,11 @@ class ControlPool(threading.Thread):
                          "Throttle - HOTAS Warthog",
                          "MFG Crosswind V2",
                          "Saitek Pro Flight Throttle Quadrant"]:
-            socket.send_multipart([b'open', joystick.encode('utf-8')])
+
+            HidRequest('open', joystick).send(socket)
             full_state_msg = Message.recv(socket)
-            if isinstance(full_state_msg, HidDeviceFullStateMsg):
+
+            if isinstance(full_state_msg, HidDeviceFullStateReply):
                 for ctrl in full_state_msg.control_events:
                     if ctrl in ctrls:
                         print("Skipping duplicate control : {}".format(ctrl))
@@ -46,6 +48,10 @@ class ControlPool(threading.Thread):
 
         for ctrl in ctrls:
             self._group.start(controls.Control(self._ctx, self._hid_event_loop.events_endpoint, ctrl))
+
+        gevent.sleep(0)
+        HidRequest('start_event_loop').send(socket)
+        Message.recv(socket)
 
     def run(self):
         self._setup_controls()

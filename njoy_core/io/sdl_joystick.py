@@ -103,6 +103,7 @@ class SDLJoystick:
 
     @property
     def full_state(self):
+        self.update()
         return [('axis', i, self.get_axis(i)) for i in range(self.nb_axes)] + \
                [('ball', i, self.get_ball(i)) for i in range(self.nb_balls)] + \
                [('button', i, self.get_button(i)) for i in range(self.nb_buttons)] + \

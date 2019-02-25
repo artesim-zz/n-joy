@@ -8,11 +8,13 @@ class MessageException(Exception):
 
 @enum.unique
 class MessageType(enum.IntEnum):
-    HID_FULL_STATE = 0
-    HID_AXIS_EVENT = 1
-    HID_BALL_EVENT = 2
-    HID_BUTTON_EVENT = 3
-    HID_HAT_EVENT = 4
+    HID_REQUEST = enum.auto()
+    HID_REPLY = enum.auto()
+    HID_FULL_STATE_REPLY = enum.auto()
+    HID_AXIS_EVENT = enum.auto()
+    HID_BALL_EVENT = enum.auto()
+    HID_BUTTON_EVENT = enum.auto()
+    HID_HAT_EVENT = enum.auto()
 
 
 class Message:
@@ -26,8 +28,14 @@ class Message:
     def from_msg_parts(cls, msg_parts):
         msg_type, = cls.__HEADER_PACKER__.unpack(msg_parts[0][0:cls.__HEADER_PACKER__.size])
 
-        if msg_type == MessageType.HID_FULL_STATE:
-            return HidDeviceFullStateMsg.from_msg_parts(msg_parts)
+        if msg_type == MessageType.HID_REQUEST:
+            return HidRequest.from_msg_parts(msg_parts)
+
+        elif msg_type == MessageType.HID_REPLY:
+            return HidReply.from_msg_parts(msg_parts)
+
+        elif msg_type == MessageType.HID_FULL_STATE_REPLY:
+            return HidDeviceFullStateReply.from_msg_parts(msg_parts)
 
         elif msg_type in {MessageType.HID_AXIS_EVENT,
                           MessageType.HID_BALL_EVENT,
@@ -43,7 +51,48 @@ class Message:
         return cls.from_msg_parts(socket.recv_multipart())
 
 
-class HidDeviceFullStateMsg(Message):
+class HidRequest(Message):
+    def __init__(self, command, *args):
+        self._command = command
+        self._args = args
+
+    @property
+    def command(self):
+        return self._command
+
+    @property
+    def args(self):
+        return self._args
+
+    @property
+    def msg_header(self):
+        return self.__HEADER_PACKER__.pack(MessageType.HID_REQUEST)
+
+    @property
+    def msg_parts(self):
+        def _encoded_part(_p):
+            if isinstance(_p, str):
+                return _p.encode('utf-8')
+            elif isinstance(_p, bytes):
+                return _p
+            else:
+                raise MessageException("Invalid message_part type : {}".format(type(_p)))
+
+        return [self.msg_header, _encoded_part(self._command)] + [_encoded_part(p) for p in self._args]
+
+    @classmethod
+    def from_msg_parts(cls, msg_parts):
+        decoded_args = [arg.decode('utf-8') for arg in msg_parts[2:]]
+        return cls(msg_parts[1].decode('utf-8'), *decoded_args)
+
+
+class HidReply(HidRequest):
+    @property
+    def msg_header(self):
+        return self.__HEADER_PACKER__.pack(MessageType.HID_REPLY)
+
+
+class HidDeviceFullStateReply(Message):
     __HEADER_PACKER__ = struct.Struct('>BI')
 
     def __init__(self, device_id, device_full_state=None, decoded_control_events=None):
@@ -88,7 +137,7 @@ class HidDeviceFullStateMsg(Message):
 
     @property
     def msg_parts(self):
-        msg_parts = [self.__HEADER_PACKER__.pack(MessageType.HID_FULL_STATE, self._device_id)]
+        msg_parts = [self.__HEADER_PACKER__.pack(MessageType.HID_FULL_STATE_REPLY, self._device_id)]
         for control_event in self._control_events:
             msg_parts.extend(control_event.msg_parts)
         return msg_parts

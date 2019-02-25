@@ -5,7 +5,7 @@ import threading
 import zmq.green as zmq
 
 from njoy_core.io.sdl_joystick import SDLJoystick
-from njoy_core.messages import HidDeviceFullStateMsg, HidAxisEvent, HidBallEvent, HidButtonEvent, HidHatEvent
+from njoy_core.messages import *
 
 
 class HidEventLoopException(Exception):
@@ -25,6 +25,7 @@ class HidEventLoop(threading.Thread):
         self._ctx = context
         self._events_endpoint = events_endpoint
         self._requests_endpoint = requests_endpoint
+        self._subscribers_ready = False
 
     @property
     def ctx(self):
@@ -43,10 +44,10 @@ class HidEventLoop(threading.Thread):
         socket.bind(self._requests_endpoint)
 
         while True:
-            request, parameters = socket.recv_multipart()
+            request = Message.recv(socket)
 
-            if request == b'open':
-                device_name = parameters.decode('utf-8')
+            if request.command == 'open':
+                device_name = request.args[0]
 
                 device_index = SDLJoystick.find_device_index(device_name)
                 if device_index is None:
@@ -59,13 +60,21 @@ class HidEventLoop(threading.Thread):
                     self._joysticks[joystick.instance_id] = joystick
                     self._joysticks_by_idx[device_index] = joystick
 
-                HidDeviceFullStateMsg(device_id=joystick.instance_id,
-                                      device_full_state=joystick.full_state).send(socket)
+                HidDeviceFullStateReply(device_id=joystick.instance_id,
+                                        device_full_state=joystick.full_state).send(socket)
+
+            elif request.command == 'start_event_loop':
+                SDLJoystick.update()
+                self._subscribers_ready = True
+                HidReply('event_loop_started').send(socket)
 
             else:
                 raise HidEventLoopException("Unknown request : {}".format(request))
 
     def _event_loop(self):
+        while not self._subscribers_ready:
+            gevent.sleep(0)
+
         socket = self._ctx.socket(zmq.PUB)
         socket.bind(self._events_endpoint)
 
