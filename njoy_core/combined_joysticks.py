@@ -4,7 +4,7 @@ import zmq.green as zmq
 
 from njoy_core import controls
 from njoy_core.io import virtual_output
-from njoy_core.messages import Message, MessageType, HidRequest, HidDeviceFullStateReply
+from njoy_core.messages import Message, MessageType, HatValue, HidRequest, HidDeviceFullStateReply
 
 
 class ControlPoolException(Exception):
@@ -66,6 +66,17 @@ class VirtualJoystick(threading.Thread):
         def _to_float_axis(_axis_value):
             return _axis_value / 32768 if _axis_value < 0 else _axis_value / 32767
 
+        # -1 for none (not pressed), or in range [0 .. 35900] (tenth of degrees)
+        _to_continuous_pov = {HatValue.HAT_UP: 0,
+                              HatValue.HAT_UP_RIGHT: 4500,
+                              HatValue.HAT_RIGHT: 9000,
+                              HatValue.HAT_DOWN_RIGHT: 13500,
+                              HatValue.HAT_DOWN: 18000,
+                              HatValue.HAT_DOWN_LEFT: 22500,
+                              HatValue.HAT_LEFT: 27000,
+                              HatValue.HAT_UP_LEFT: 31500,
+                              HatValue.HAT_CENTER: -1}
+
         socket = self._ctx.socket(zmq.PULL)
         socket.bind(self._events_endpoint)
 
@@ -80,7 +91,7 @@ class VirtualJoystick(threading.Thread):
                 self._output_device.set_button(button_id=msg.ctrl_id, state=msg.state)
 
             elif msg.msg_type == MessageType.HID_HAT_EVENT:
-                pass  # self._output_device.set_disc_pov(PovID=msg.ctrl_id, PovValue=msg.value)
+                self._output_device.set_cont_pov(pov_id=msg.ctrl_id, pov_value=_to_continuous_pov[msg.value])
 
 
 class CombinedJoystick(threading.Thread):

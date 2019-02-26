@@ -27,19 +27,6 @@ class OutputDevice(pyvjoy.VJoyDevice):
         self.reset()
 
     @staticmethod
-    def _to_vjoy_cont_pov(value):
-        mapping = {(0, 0): -1,
-                   (0, 1): 0,
-                   (1, 1): 4500,
-                   (1, 0): 9000,
-                   (1, -1): 13500,
-                   (0, -1): 18000,
-                   (-1, -1): 22500,
-                   (-1, 0): 27000,
-                   (-1, 1): 31500}
-        return mapping[value]
-
-    @staticmethod
     def _to_vjoy_axis_id(value):
         mapping = [pyvjoy.HID_USAGE_X, pyvjoy.HID_USAGE_Y, pyvjoy.HID_USAGE_Z,
                    pyvjoy.HID_USAGE_RX, pyvjoy.HID_USAGE_RY, pyvjoy.HID_USAGE_RZ,
@@ -79,4 +66,4 @@ class OutputDevice(pyvjoy.VJoyDevice):
         """Set a given POV (numbered from 0) to a continuous direction :
         pov_id is 0-based, internally converted to vjoy 1-based pov ID
         pov_value is :an int in range [0 .. 35900] (tenth of degrees) or -1 for none (not pressed)"""
-        return super(OutputDevice, self).set_cont_pov(1 + pov_id, self._to_vjoy_cont_pov(pov_value))
+        return super(OutputDevice, self).set_cont_pov(1 + pov_id, pov_value)

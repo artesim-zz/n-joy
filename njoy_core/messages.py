@@ -17,6 +17,19 @@ class MessageType(enum.IntEnum):
     HID_HAT_EVENT = enum.auto()
 
 
+@enum.unique
+class HatValue(enum.IntFlag):
+    HAT_CENTER = 0
+    HAT_UP = 1
+    HAT_RIGHT = 2
+    HAT_DOWN = 4
+    HAT_LEFT = 8
+    HAT_UP_RIGHT = HAT_UP | HAT_RIGHT
+    HAT_UP_LEFT = HAT_UP | HAT_LEFT
+    HAT_DOWN_RIGHT = HAT_DOWN | HAT_RIGHT
+    HAT_DOWN_LEFT = HAT_DOWN | HAT_LEFT
+
+
 class Message:
     __HEADER_PACKER__ = struct.Struct('>B')
 
@@ -212,7 +225,7 @@ class HidEvent(Message):
         elif msg_type == MessageType.HID_HAT_EVENT:
             return HidHatEvent(device_id=device_id,
                                ctrl_id=ctrl_id,
-                               value=HidHatEvent.from_value_parts(*msg_parts[1:]))
+                               value=HatValue(HidHatEvent.from_value_parts(*msg_parts[1:])))
 
         else:
             raise MessageException("Invalid Message Type")
