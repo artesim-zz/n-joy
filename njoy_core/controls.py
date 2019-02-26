@@ -1,23 +1,20 @@
 import gevent
 import zmq.green as zmq
 
-from njoy_core.messages import Message
+from njoy_core.messages import Message, MessageType, HidAxisEvent, HidButtonEvent, HidHatEvent
 
 
 class Control(gevent.Greenlet):
     """High level abstraction of an individual control (button, hat, axis, etc.) of an input device."""
 
-    def __init__(self, virtual_joystick, ctrl, hid_event_loop):
+    def __init__(self, virtual_joystick, virtual_ctrl_id, ctrl, hid_event_loop):
         super(Control, self).__init__()
         self._hid_event_loop = hid_event_loop
         self._virtual_joystick = virtual_joystick
+        self._virtual_ctrl_id = virtual_ctrl_id
         self._ctx = hid_event_loop.ctx
         self._subscribe_filter = ctrl.msg_header
-        self._device_id, self._ctrl_type, self._ctrl_id = ctrl.as_key
         self._value = None
-
-    def __repr__(self):
-        return '<Control /{}/{}/{}>'.format(self._device_id, self._ctrl_type, self._ctrl_id)
 
     def _run(self):
         socket_in = self._ctx.socket(zmq.SUB)
@@ -29,5 +26,14 @@ class Control(gevent.Greenlet):
 
         while True:
             msg = Message.recv(socket_in)
-            msg.send(socket_out)
+
+            if msg.msg_type == MessageType.HID_AXIS_EVENT:
+                HidAxisEvent(self._virtual_joystick.device_id, self._virtual_ctrl_id, msg.value).send(socket_out)
+
+            elif msg.msg_type == MessageType.HID_BUTTON_EVENT:
+                HidButtonEvent(self._virtual_joystick.device_id, self._virtual_ctrl_id, msg.state).send(socket_out)
+
+            elif msg.msg_type == MessageType.HID_HAT_EVENT:
+                HidHatEvent(self._virtual_joystick.device_id, self._virtual_ctrl_id, msg.value).send(socket_out)
+
             gevent.sleep(0)

@@ -3,6 +3,7 @@ import threading
 import zmq.green as zmq
 
 from njoy_core import controls
+from njoy_core.io import virtual_output
 from njoy_core.messages import Message, MessageType, HidRequest, HidDeviceFullStateReply
 
 
@@ -40,28 +41,45 @@ class VirtualJoystick(threading.Thread):
             ctrl_grps[ctrl_evt.msg_type]['groups'][-1].append(ctrl_evt)
 
         return [{
-            'axes': ctrl_grps[AXIS]['groups'][i] if i < len(ctrl_grps[AXIS]['groups']) else list(),
-            'balls': ctrl_grps[BALL]['groups'][i] if i < len(ctrl_grps[BALL]['groups']) else list(),
-            'buttons': ctrl_grps[BUTTON]['groups'][i] if i < len(ctrl_grps[BUTTON]['groups']) else list(),
-            'hats': ctrl_grps[HAT]['groups'][i] if i < len(ctrl_grps[HAT]['groups']) else list()
+            'axes': enumerate(ctrl_grps[AXIS]['groups'][i] if i < len(ctrl_grps[AXIS]['groups']) else list()),
+            'balls': enumerate(ctrl_grps[BALL]['groups'][i] if i < len(ctrl_grps[BALL]['groups']) else list()),
+            'buttons': enumerate(ctrl_grps[BUTTON]['groups'][i] if i < len(ctrl_grps[BUTTON]['groups']) else list()),
+            'hats': enumerate(ctrl_grps[HAT]['groups'][i] if i < len(ctrl_grps[HAT]['groups']) else list())
         } for i in range(max([len(g['groups']) for g in ctrl_grps.values()]))]
 
-    def __init__(self, name, context, events_endpoint):
-        super(VirtualJoystick, self).__init__(name=name)
+    def __init__(self, device_id, context, events_endpoint):
+        super(VirtualJoystick, self).__init__(name="/virtual_joysticks/{}".format(device_id))
         self._ctx = context
         self._events_endpoint = events_endpoint
+        self._device_id = device_id
+        self._output_device = virtual_output.OutputDevice(device_id=device_id)
 
     @property
     def events_endpoint(self):
         return self._events_endpoint
 
+    @property
+    def device_id(self):
+        return self._device_id
+
     def run(self):
+        def _to_float_axis(_axis_value):
+            return _axis_value / 32768 if _axis_value < 0 else _axis_value / 32767
+
         socket = self._ctx.socket(zmq.PULL)
         socket.bind(self._events_endpoint)
 
         while True:
             msg = Message.recv(socket)
-            print('VirtualJoystick {} received {}'.format(self.name, msg))
+
+            if msg.msg_type == MessageType.HID_AXIS_EVENT:
+                self._output_device.set_axis(axis_id=msg.ctrl_id, axis_value=_to_float_axis(msg.value))
+
+            elif msg.msg_type == MessageType.HID_BUTTON_EVENT:
+                self._output_device.set_button(button_id=msg.ctrl_id, state=msg.state)
+
+            elif msg.msg_type == MessageType.HID_HAT_EVENT:
+                pass  # self._output_device.set_disc_pov(PovID=msg.ctrl_id, PovValue=msg.value)
 
 
 class CombinedJoystick(threading.Thread):
@@ -100,27 +118,27 @@ class CombinedJoystick(threading.Thread):
         socket.connect(self._hid_event_loop.requests_endpoint)
 
         group = gevent.pool.Group()
-        for virtual_joystick, ctrl_grp in [(VirtualJoystick(name="joystick-{}".format(i),
+        for virtual_joystick, ctrl_grp in [(VirtualJoystick(device_id=i,
                                                             context=self._ctx,
                                                             events_endpoint="inproc://virtual_joysticks/{}".format(i)),
                                             ctrl_grp)
                                            for (i, ctrl_grp) in
                                            enumerate(VirtualJoystick.dispatch_controls(self._hid_full_state(socket)))]:
 
-            for ctrl in [controls.Control(virtual_joystick, ctrl, self._hid_event_loop)
-                         for ctrl in ctrl_grp['axes']]:
+            for ctrl in [controls.Control(virtual_joystick, ctrl_id, ctrl, self._hid_event_loop)
+                         for ctrl_id, ctrl in ctrl_grp['axes']]:
                 group.start(ctrl)
 
-            for ctrl in [controls.Control(virtual_joystick, ctrl, self._hid_event_loop)
-                         for ctrl in ctrl_grp['balls']]:
+            for ctrl in [controls.Control(virtual_joystick, ctrl_id, ctrl, self._hid_event_loop)
+                         for ctrl_id, ctrl in ctrl_grp['balls']]:
                 group.start(ctrl)
 
-            for ctrl in [controls.Control(virtual_joystick, ctrl, self._hid_event_loop)
-                         for ctrl in ctrl_grp['buttons']]:
+            for ctrl in [controls.Control(virtual_joystick, ctrl_id, ctrl, self._hid_event_loop)
+                         for ctrl_id, ctrl in ctrl_grp['buttons']]:
                 group.start(ctrl)
 
-            for ctrl in [controls.Control(virtual_joystick, ctrl, self._hid_event_loop)
-                         for ctrl in ctrl_grp['hats']]:
+            for ctrl in [controls.Control(virtual_joystick, ctrl_id, ctrl, self._hid_event_loop)
+                         for ctrl_id, ctrl in ctrl_grp['hats']]:
                 group.start(ctrl)
 
             virtual_joystick.start()
