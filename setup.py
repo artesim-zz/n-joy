@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='n-joy',
-    version='0.2.0',
+    version='0.3.0',
     packages=['njoy_core'],
     requires=['pyzmq>=18', 'gevent>=1.4', 'PySDL2>=0.9.6', 'pyvjoy'],
     url='http://www.n-joy.io/',

@@ -1,11 +1,11 @@
 import gevent
-import threading
 import sdl2
 import sdl2.ext
+import threading
 import zmq.green as zmq
 
 from njoy_core.io.sdl_joystick import SDLJoystick
-from njoy_core.messages import HidDeviceFullStateMsg, HidAxisEvent, HidBallEvent, HidButtonEvent, HidHatEvent
+from njoy_core.messages import *
 
 
 class HidEventLoopException(Exception):
@@ -25,16 +25,29 @@ class HidEventLoop(threading.Thread):
         self._ctx = context
         self._events_endpoint = events_endpoint
         self._requests_endpoint = requests_endpoint
+        self._subscribers_ready = False
+
+    @property
+    def ctx(self):
+        return self._ctx
+
+    @property
+    def events_endpoint(self):
+        return self._events_endpoint
+
+    @property
+    def requests_endpoint(self):
+        return self._requests_endpoint
 
     def _requests_handler(self):
         socket = self._ctx.socket(zmq.REP)
         socket.bind(self._requests_endpoint)
 
         while True:
-            request, parameters = socket.recv_multipart()
+            request = Message.recv(socket)
 
-            if request == b'open':
-                device_name = parameters.decode('utf-8')
+            if request.command == 'open':
+                device_name = request.args[0]
 
                 device_index = SDLJoystick.find_device_index(device_name)
                 if device_index is None:
@@ -47,17 +60,27 @@ class HidEventLoop(threading.Thread):
                     self._joysticks[joystick.instance_id] = joystick
                     self._joysticks_by_idx[device_index] = joystick
 
-                HidDeviceFullStateMsg(device_id=joystick.instance_id,
-                                      device_full_state=joystick.full_state).send(socket)
+                HidDeviceFullStateReply(device_id=joystick.instance_id,
+                                        device_full_state=joystick.full_state).send(socket)
+
+            elif request.command == 'start_event_loop':
+                SDLJoystick.update()
+                self._subscribers_ready = True
+                HidReply('event_loop_started').send(socket)
 
             else:
                 raise HidEventLoopException("Unknown request : {}".format(request))
 
     def _event_loop(self):
+        print("HidEventLoop: waiting for controls...")
+        while not self._subscribers_ready:
+            gevent.sleep(0)
+
         socket = self._ctx.socket(zmq.PUB)
         socket.bind(self._events_endpoint)
 
-        while gevent.sleep(0) is None:
+        print("HidEventLoop: started")
+        while True:
             events = sdl2.ext.get_events()
             for event in events:
                 if event.type == sdl2.SDL_QUIT:
@@ -84,12 +107,12 @@ class HidEventLoop(threading.Thread):
                                 ctrl_id=event.jhat.hat,
                                 value=event.jhat.value).send(socket)
 
-    def run(self, *args, **kwargs):
+    def run(self):
         SDLJoystick.sdl_init()
 
-        requests_server = gevent.spawn(self._requests_handler)
+        requests_handler = gevent.spawn(self._requests_handler)
         event_loop = gevent.spawn(self._event_loop)
-        gevent.joinall([requests_server, event_loop])
+        gevent.joinall([requests_handler, event_loop])
 
         for joystick in self._joysticks.values():
             joystick.close()
