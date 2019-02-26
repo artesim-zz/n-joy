@@ -78,7 +78,7 @@ class HidEventLoop(threading.Thread):
         socket = self._ctx.socket(zmq.PUB)
         socket.bind(self._events_endpoint)
 
-        while gevent.sleep(0) is None:
+        while True:
             events = sdl2.ext.get_events()
             for event in events:
                 if event.type == sdl2.SDL_QUIT:

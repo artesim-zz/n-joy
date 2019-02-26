@@ -35,5 +35,3 @@ class Control(gevent.Greenlet):
 
             elif msg.msg_type == MessageType.HID_HAT_EVENT:
                 HidHatEvent(self._virtual_joystick.device_id, self._virtual_ctrl_id, msg.value).send(socket_out)
-
-            gevent.sleep(0)
