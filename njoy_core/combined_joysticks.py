@@ -69,6 +69,7 @@ class VirtualJoystick(threading.Thread):
         socket = self._ctx.socket(zmq.PULL)
         socket.bind(self._events_endpoint)
 
+        print("VirtualJoystick {} : Started".format(self.name))
         while True:
             msg = Message.recv(socket)
 
@@ -114,6 +115,7 @@ class CombinedJoystick(threading.Thread):
         return sorted(ctrls)
 
     def run(self):
+        print("CombinedJoystick: Initializing controls")
         socket = self._ctx.socket(zmq.REQ)
         socket.connect(self._hid_event_loop.requests_endpoint)
 
@@ -143,10 +145,12 @@ class CombinedJoystick(threading.Thread):
 
             virtual_joystick.start()
 
+        print("CombinedJoystick: signaling HidEventLoop...")
         gevent.sleep(0)
         HidRequest('start_event_loop').send(socket)
         Message.recv(socket)
 
+        print("CombinedJoystick: Ready")
         group.join()
 
 # eof

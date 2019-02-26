@@ -72,12 +72,14 @@ class HidEventLoop(threading.Thread):
                 raise HidEventLoopException("Unknown request : {}".format(request))
 
     def _event_loop(self):
+        print("HidEventLoop: waiting for controls...")
         while not self._subscribers_ready:
             gevent.sleep(0)
 
         socket = self._ctx.socket(zmq.PUB)
         socket.bind(self._events_endpoint)
 
+        print("HidEventLoop: started")
         while True:
             events = sdl2.ext.get_events()
             for event in events:
