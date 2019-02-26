@@ -154,12 +154,9 @@ class HidEvent(Message):
     __HEADER_PACKER__ = struct.Struct('>BII')
 
     def __init__(self, device_id, ctrl_id):
+        self._msg_type = NotImplemented
         self._device_id = device_id
         self._ctrl_id = ctrl_id
-
-    @property
-    def as_key(self):
-        return NotImplemented
 
     def __hash__(self):
         return hash(self.as_key)
@@ -168,12 +165,24 @@ class HidEvent(Message):
         return self.as_key < other.as_key
 
     @property
+    def as_key(self):
+        return self._device_id, self._msg_type, self._ctrl_id
+
+    @property
+    def msg_type(self):
+        return self._msg_type
+
+    @property
     def device_id(self):
         return self._device_id
 
     @property
     def ctrl_id(self):
         return self._ctrl_id
+
+    @property
+    def msg_header(self):
+        return self.__HEADER_PACKER__.pack(self._msg_type, self._device_id, self._ctrl_id)
 
     @property
     def msg_parts(self):
@@ -214,22 +223,15 @@ class HidAxisEvent(HidEvent):
 
     def __init__(self, device_id, ctrl_id, value):
         super(HidAxisEvent, self).__init__(device_id, ctrl_id)
+        self._msg_type = MessageType.HID_AXIS_EVENT
         self._value = value
 
     def __repr__(self):
         return '<HidAxisEvent: /{}/axis/{} = {}>'.format(self._device_id, self._ctrl_id, self._value)
 
     @property
-    def as_key(self):
-        return self._device_id, 'axis', self._ctrl_id
-
-    @property
     def value(self):
         return self._value
-
-    @property
-    def msg_header(self):
-        return self.__HEADER_PACKER__.pack(MessageType.HID_AXIS_EVENT, self._device_id, self._ctrl_id)
 
     @property
     def msg_parts(self):
@@ -246,6 +248,7 @@ class HidBallEvent(HidEvent):
 
     def __init__(self, device_id, ctrl_id, dx, dy):
         super(HidBallEvent, self).__init__(device_id, ctrl_id)
+        self._msg_type = MessageType.HID_BALL_EVENT
         self._dx = dx
         self._dy = dy
 
@@ -254,20 +257,12 @@ class HidBallEvent(HidEvent):
                                                                self._ctrl_id, self._dx, self._dy)
 
     @property
-    def as_key(self):
-        return self._device_id, 'ball', self._ctrl_id
-
-    @property
     def dx(self):
         return self._dx
 
     @property
     def dy(self):
         return self._dy
-
-    @property
-    def msg_header(self):
-        return self.__HEADER_PACKER__.pack(MessageType.HID_BALL_EVENT, self._device_id, self._ctrl_id)
 
     @property
     def msg_parts(self):
@@ -284,22 +279,15 @@ class HidButtonEvent(HidEvent):
 
     def __init__(self, device_id, ctrl_id, state):
         super(HidButtonEvent, self).__init__(device_id, ctrl_id)
+        self._msg_type = MessageType.HID_BUTTON_EVENT
         self._state = state
 
     def __repr__(self):
         return '<HidButtonEvent: /{}/button/{} = {}>'.format(self._device_id, self._ctrl_id, self._state)
 
     @property
-    def as_key(self):
-        return self._device_id, 'button', self._ctrl_id
-
-    @property
     def state(self):
         return self._state
-
-    @property
-    def msg_header(self):
-        return self.__HEADER_PACKER__.pack(MessageType.HID_BUTTON_EVENT, self._device_id, self._ctrl_id)
 
     @property
     def msg_parts(self):
@@ -316,22 +304,15 @@ class HidHatEvent(HidEvent):
 
     def __init__(self, device_id, ctrl_id, value):
         super(HidHatEvent, self).__init__(device_id, ctrl_id)
+        self._msg_type = MessageType.HID_HAT_EVENT
         self._value = value
 
     def __repr__(self):
         return '<HidHatEvent: /{}/hat/{} = {}>'.format(self._device_id, self._ctrl_id, self._value)
 
     @property
-    def as_key(self):
-        return self._device_id, 'hat', self._ctrl_id
-
-    @property
     def value(self):
         return self._value
-
-    @property
-    def msg_header(self):
-        return self.__HEADER_PACKER__.pack(MessageType.HID_HAT_EVENT, self._device_id, self._ctrl_id)
 
     @property
     def msg_parts(self):

@@ -1,6 +1,6 @@
 import zmq.green as zmq
 
-from njoy_core.control_pool import ControlPool
+from njoy_core.combined_joysticks import CombinedJoystick
 from njoy_core.hid_event_loop import HidEventLoop
 
 
@@ -11,7 +11,7 @@ def main():
                                   events_endpoint="inproc://hid_event_loop",
                                   requests_endpoint="inproc://hid_event_loop_requests")
 
-    ctrl_pool = ControlPool(hid_event_loop, '')
+    ctrl_pool = CombinedJoystick(hid_event_loop)
 
     hid_event_loop.start()
     ctrl_pool.start()
