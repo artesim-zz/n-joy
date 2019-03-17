@@ -53,6 +53,10 @@ class SDLJoystick:
         return name.decode('utf-8')
 
     @staticmethod
+    def device_names():
+        return [sdl2.SDL_JoystickNameForIndex(i).decode('utf-8') for i in range(SDLJoystick.nb_joysticks())]
+
+    @staticmethod
     def find_device_index(device_name):
         for i in range(SDLJoystick.nb_joysticks()):
             if device_name == SDLJoystick.device_name(i):

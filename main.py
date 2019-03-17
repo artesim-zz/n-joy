@@ -1,7 +1,7 @@
 import zmq.green as zmq
 
 from njoy_core.combined_joysticks import CombinedJoystick
-from njoy_core.hid_event_loop import HidEventLoop
+from njoy_core.input_node.hid_event_loop import HidEventLoop
 
 
 def main():
