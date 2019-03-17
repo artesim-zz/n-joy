@@ -5,7 +5,7 @@ import threading
 import zmq.green as zmq
 
 from njoy_core.io.sdl_joystick import SDLJoystick
-from njoy_core.messages import *
+from njoy_core.common.messages import *
 
 
 class HidEventLoopException(Exception):

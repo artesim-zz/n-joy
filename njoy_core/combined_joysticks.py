@@ -4,7 +4,7 @@ import zmq.green as zmq
 
 from njoy_core import controls
 from njoy_core.io import virtual_output
-from njoy_core.messages import Message, MessageType, HatValue, HidRequest, HidDeviceFullStateReply
+from njoy_core.common.messages import Message, MessageType, HatValue, HidRequest, HidDeviceFullStateReply
 
 
 class ControlPoolException(Exception):

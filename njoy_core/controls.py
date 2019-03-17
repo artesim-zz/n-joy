@@ -1,7 +1,7 @@
 import gevent
 import zmq.green as zmq
 
-from njoy_core.messages import Message, MessageType, HidAxisEvent, HidButtonEvent, HidHatEvent
+from njoy_core.common.messages import Message, MessageType, HidAxisEvent, HidButtonEvent, HidHatEvent
 
 
 class Control(gevent.Greenlet):

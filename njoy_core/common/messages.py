@@ -6,6 +6,64 @@ class MessageException(Exception):
     pass
 
 
+class ControlEvent:
+    __BOOL_PACKER__ = struct.Struct('>?')
+    __FLOAT_PACKER__ = struct.Struct('>d')
+
+    def __init__(self, value=None):
+        self.value = value
+
+    def _serialize_value(self):
+        if self.value is None:
+            return b''
+        elif isinstance(self.value, bool):
+            return self.__BOOL_PACKER__.pack(self.value)
+        elif isinstance(self.value, float):
+            return self.__FLOAT_PACKER__.pack(self.value)
+
+    def _serialize(self):
+        return [self._serialize_value()]
+
+    def send(self, socket):
+        socket.send_multipart(self._serialize())
+
+    @classmethod
+    def _deserialize_value(cls, value_frame):
+        if len(value_frame) == cls.__BOOL_PACKER__.size:
+            unpacked = cls.__BOOL_PACKER__.unpack(value_frame)
+            return unpacked[0]
+
+        elif len(value_frame) == cls.__FLOAT_PACKER__.size:
+            unpacked = cls.__FLOAT_PACKER__.unpack(value_frame)
+            return unpacked[0]
+
+        else:
+            return None
+
+    @classmethod
+    def _deserialize(cls, frames):
+        return {'value': cls._deserialize_value(frames[0])}
+
+    @classmethod
+    def recv(cls, socket):
+        return cls(**cls._deserialize(socket.recv_multipart()))
+
+
+class NamedControlEvent(ControlEvent):
+    def __init__(self, identity: str, value):
+        super().__init__(value)
+        self.identity = identity
+
+    def _serialize(self):
+        return [self.identity.encode('utf-8'),
+                self._serialize_value()]
+
+    @classmethod
+    def _deserialize(cls, frames):
+        return {'identity': frames[0].decode('utf-8'),
+                'value': cls._deserialize_value(frames[1])}
+
+
 @enum.unique
 class MessageType(enum.IntEnum):
     HID_REQUEST = enum.auto()
