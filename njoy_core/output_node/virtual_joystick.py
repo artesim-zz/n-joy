@@ -4,7 +4,7 @@ import threading
 
 from zmq import green as zmq
 
-from njoy_core.common.messages import MessageType, HatValue, TypedMessage, AxisOldEvent, ButtonOldEvent, HatOldEvent
+from njoy_core.common.messages import MessageType, HatValue, Message, AxisEvent, ButtonEvent, HatEvent
 from njoy_core.output_node import vjoy_device
 
 
@@ -29,7 +29,7 @@ class Feeder(gevent.greenlet):
         self._subscribe(socket)
 
         while True:
-            msg = TypedMessage.recv(socket)
+            msg = Message.recv(socket)
             self._handle_event(msg)
 
 
@@ -39,7 +39,7 @@ class AxisFeeder(Feeder):
         return _axis_value / 32768 if _axis_value < 0 else _axis_value / 32767
 
     def _subscribe(self, socket):
-        socket.setsockopt(zmq.SUBSCRIBE, AxisOldEvent(self._device_id, self._ctrl_id).header_parts)
+        socket.setsockopt(zmq.SUBSCRIBE, AxisEvent(self._device_id, self._ctrl_id).header_parts)
 
     def _handle_event(self, event):
         self._output_device.set_axis(axis_id=self._ctrl_id,
@@ -48,7 +48,7 @@ class AxisFeeder(Feeder):
 
 class ButtonFeeder(Feeder):
     def _subscribe(self, socket):
-        socket.setsockopt(zmq.SUBSCRIBE, ButtonOldEvent(self._device_id, self._ctrl_id).header_parts)
+        socket.setsockopt(zmq.SUBSCRIBE, ButtonEvent(self._device_id, self._ctrl_id).header_parts)
 
     def _handle_event(self, event):
         self._output_device.set_button(button_id=self._ctrl_id,
@@ -68,7 +68,7 @@ class HatFeeder(Feeder):
                            HatValue.HAT_CENTER: -1}
 
     def _subscribe(self, socket):
-        socket.setsockopt(zmq.SUBSCRIBE, HatOldEvent(self._device_id, self._ctrl_id).header_parts)
+        socket.setsockopt(zmq.SUBSCRIBE, HatEvent(self._device_id, self._ctrl_id).header_parts)
 
     def _handle_event(self, event):
         self._output_device.set_axis(pov_id=self._ctrl_id,

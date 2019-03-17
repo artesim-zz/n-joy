@@ -3,7 +3,7 @@ import pickle
 import threading
 import zmq.green as zmq
 
-from njoy_core.common.messages import MessageType, TypedMessage, Reply
+from njoy_core.common.messages import MessageType, Message, HidReply
 from .filtering_buffer import FilteringBuffer
 
 
@@ -64,10 +64,10 @@ class DesignRunner(threading.Thread):
     def _setup_output_nodes(self):
         socket = self._ctx.socket(zmq.REQ)
         socket.bind(self._requests_endpoint)
-        request = TypedMessage.recv(socket)
+        request = Message.recv(socket)
         if request.command == 'register':
-            Reply(command='assignments',
-                  *self._assign_terminal_controls([pickle.loads(dc) for dc in request.args]))
+            HidReply(command='assignments',
+                     *self._assign_terminal_controls([pickle.loads(dc) for dc in request.args]))
 
         else:
             raise DesignRunnerException("Unexpected request : {}".format(request.command))
