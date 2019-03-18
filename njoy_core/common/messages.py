@@ -6,43 +6,81 @@ class MessageException(Exception):
     pass
 
 
+@enum.unique
+class HatValue(enum.IntFlag):
+    HAT_CENTER = 0
+    HAT_UP = 1
+    HAT_RIGHT = 2
+    HAT_DOWN = 4
+    HAT_LEFT = 8
+    HAT_UP_RIGHT = HAT_UP | HAT_RIGHT
+    HAT_UP_LEFT = HAT_UP | HAT_LEFT
+    HAT_DOWN_RIGHT = HAT_DOWN | HAT_RIGHT
+    HAT_DOWN_LEFT = HAT_DOWN | HAT_LEFT
+
+
+@enum.unique
+class ControlEventKind(enum.IntFlag):
+    BUTTON = 1
+    HAT = 2
+    AXIS = 4
+
+
 class ControlEvent:
-    __BOOL_PACKER__ = struct.Struct('>?')
-    __FLOAT_PACKER__ = struct.Struct('>d')
+    __EVENT_KIND_PACKER__ = struct.Struct('>B')
+    __BUTTON_VALUE_PACKER__ = struct.Struct('>?')
+    __HAT_VALUE_PACKER__ = struct.Struct('>B')
+    __AXIS_VALUE_PACKER__ = struct.Struct('>d')
 
     def __init__(self, value=None):
         self.value = value
 
     def _serialize_value(self):
         if self.value is None:
-            return b''
+            return [b'']
         elif isinstance(self.value, bool):
-            return self.__BOOL_PACKER__.pack(self.value)
+            return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.BUTTON),
+                    self.__BUTTON_VALUE_PACKER__.pack(self.value)]
+        elif isinstance(self.value, int):
+            return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.HAT),
+                    self.__HAT_VALUE_PACKER__.pack(self.value)]
         elif isinstance(self.value, float):
-            return self.__FLOAT_PACKER__.pack(self.value)
+            return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.AXIS),
+                    self.__AXIS_VALUE_PACKER__.pack(self.value)]
+        else:
+            raise MessageException("Cannot serialize value : {}".format(self.value))
 
     def _serialize(self):
-        return [self._serialize_value()]
+        return self._serialize_value()
 
     def send(self, socket):
         socket.send_multipart(self._serialize())
 
     @classmethod
-    def _deserialize_value(cls, value_frame):
-        if len(value_frame) == cls.__BOOL_PACKER__.size:
-            unpacked = cls.__BOOL_PACKER__.unpack(value_frame)
-            return unpacked[0]
-
-        elif len(value_frame) == cls.__FLOAT_PACKER__.size:
-            unpacked = cls.__FLOAT_PACKER__.unpack(value_frame)
-            return unpacked[0]
-
-        else:
+    def _deserialize_value(cls, value_frames):
+        if len(value_frames) == 1 and value_frames[0] == b'':
             return None
+
+        elif len(value_frames) == 2:
+            event_kind = cls.__EVENT_KIND_PACKER__.unpack(value_frames[0])
+            event_kind = ControlEventKind(event_kind[0])
+            if event_kind == ControlEventKind.BUTTON:
+                unpacked = cls.__BUTTON_VALUE_PACKER__.unpack(value_frames[1])
+                return unpacked[0]
+            elif event_kind == ControlEventKind.HAT:
+                unpacked = cls.__HAT_VALUE_PACKER__.unpack(value_frames[1])
+                return unpacked[0]
+            elif event_kind == ControlEventKind.AXIS:
+                unpacked = cls.__AXIS_VALUE_PACKER__.unpack(value_frames[1])
+                return unpacked[0]
+            else:
+                raise MessageException("Cannot deserialize value frames : {}".format(value_frames))
+        else:
+            raise MessageException("Cannot deserialize value frames : {}".format(value_frames))
 
     @classmethod
     def _deserialize(cls, frames):
-        return {'value': cls._deserialize_value(frames[0])}
+        return {'value': cls._deserialize_value(frames)}
 
     @classmethod
     def recv(cls, socket):
@@ -55,13 +93,12 @@ class NamedControlEvent(ControlEvent):
         self.identity = identity
 
     def _serialize(self):
-        return [self.identity.encode('utf-8'),
-                self._serialize_value()]
+        return [self.identity.encode('utf-8')] + self._serialize_value()
 
     @classmethod
     def _deserialize(cls, frames):
         return {'identity': frames[0].decode('utf-8'),
-                'value': cls._deserialize_value(frames[1])}
+                'value': cls._deserialize_value(frames[1:])}
 
 
 @enum.unique
@@ -73,19 +110,6 @@ class MessageType(enum.IntEnum):
     HID_BALL_EVENT = enum.auto()
     HID_BUTTON_EVENT = enum.auto()
     HID_HAT_EVENT = enum.auto()
-
-
-@enum.unique
-class HatValue(enum.IntFlag):
-    HAT_CENTER = 0
-    HAT_UP = 1
-    HAT_RIGHT = 2
-    HAT_DOWN = 4
-    HAT_LEFT = 8
-    HAT_UP_RIGHT = HAT_UP | HAT_RIGHT
-    HAT_UP_LEFT = HAT_UP | HAT_LEFT
-    HAT_DOWN_RIGHT = HAT_DOWN | HAT_RIGHT
-    HAT_DOWN_LEFT = HAT_DOWN | HAT_LEFT
 
 
 class Message:
