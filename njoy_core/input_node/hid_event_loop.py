@@ -4,7 +4,7 @@ import time
 import zmq
 
 from .sdl_joystick import SDLJoystick
-from njoy_core.common.messages import HidRequest, HidReply, NamedControlEvent
+from njoy_core.common.messages import InputNodeRegisterRequest, InputNodeRegisterReply, ControlEvent
 
 
 class HidEventLoopException(Exception):
@@ -21,7 +21,6 @@ __LOOP_SLEEP_TIME__ = 0.0001  # 100 µs
 
 class HidEventLoop:
     def __init__(self, context, events_endpoint, requests_endpoint):
-        self._devices = dict()
         self._ctx, self._events_socket = self._zmq_setup(context, events_endpoint)
         self._requests_endpoint = requests_endpoint
 
@@ -37,33 +36,28 @@ class HidEventLoop:
         socket.connect(requests_endpoint)
 
         # First send our list of joysticks to njoy_core
-        HidRequest('register', *SDLJoystick.device_names()).send(socket)
+        InputNodeRegisterRequest(devices=SDLJoystick.device_names()).send(socket)
 
         # The nJoy core replies with the list of those it's interested in, if any...
-        reply = HidReply.recv(socket)
+        reply = InputNodeRegisterReply.recv(socket)
 
         # ... so open those
-        # TODO: registered should send a device_id for each registered device, so we can use that in the events
-        if reply.command != 'registered':
-            raise HidEventLoopException("Unexpected reply from nJoy core : {}".format(reply))
-
-        if not reply.args:
+        if not reply.device_ids_map:
             raise HidEventLoopException("The nJoy core isn't interested in any of our devices, exiting.")
 
         devices = dict()
-        for device_name in reply.args:
-            device_index = SDLJoystick.find_device_index(device_name)
-            if device_index is None:
+        for (njoy_device_id, device_name) in reply.device_ids_map.items():
+            sdl_device_id = SDLJoystick.find_device_index(device_name)
+            if sdl_device_id is None:
                 raise HidEventLoopException("Unknown device : {}".format(device_name))
 
-            device = SDLJoystick.open(device_index)
-            devices[device.instance_id] = device
+            device = SDLJoystick.open(sdl_device_id)
+            devices[device.instance_id] = {'node_id': reply.node_id,
+                                           'device_id': njoy_device_id,
+                                           'device': device}
         return devices
 
     def run(self):
-        def _identity(device_name, ctrl_type, ctrl_id):
-            return '/{}/{}/{}'.format(device_name, ctrl_type, ctrl_id)
-
         def _axis(value):
             # Convert from [-32768 .. 32768] to [-1.0 .. 1.0]
             return 2 * ((value + 0x8000) / 0xFFFF) - 1
@@ -72,7 +66,7 @@ class HidEventLoop:
             return value != 0
 
         SDLJoystick.sdl_init()
-        self._devices = self._register_devices(self._ctx, self._requests_endpoint)
+        devices = self._register_devices(self._ctx, self._requests_endpoint)
 
         print("HidEventLoop: started")
         try:
@@ -82,29 +76,32 @@ class HidEventLoop:
                         raise HidEventLoopQuit()
 
                     elif event.type == sdl2.SDL_JOYAXISMOTION:
-                        NamedControlEvent(identity=_identity(self._devices[event.jaxis.which].name,
-                                                             'axis',
-                                                             event.jaxis.axis),
-                                          value=_axis(event.jaxis.value)).send(self._events_socket)
+                        device = devices[event.jaxis.which]
+                        ControlEvent(node=device['node_id'],
+                                     device=device['device_id'],
+                                     control=event.jaxis.axis,
+                                     value=_axis(event.jaxis.value)).send(self._events_socket)
 
                     elif event.type in {sdl2.SDL_JOYBUTTONDOWN, sdl2.SDL_JOYBUTTONUP}:
-                        NamedControlEvent(identity=_identity(self._devices[event.jbutton.which].name,
-                                                             'button',
-                                                             event.jbutton.button),
-                                          value=_button(event.jbutton.state)).send(self._events_socket)
+                        device = devices[event.jbutton.which]
+                        ControlEvent(node=device['node_id'],
+                                     device=device['device_id'],
+                                     control=event.jbutton.button,
+                                     value=_button(event.jbutton.state)).send(self._events_socket)
 
                     elif event.type == sdl2.SDL_JOYHATMOTION:
-                        NamedControlEvent(identity=_identity(self._devices[event.jhat.which].name,
-                                                             'hat',
-                                                             event.jhat.hat),
-                                          value=event.jhat.value).send(self._events_socket)
+                        device = devices[event.jhat.which]
+                        ControlEvent(node=device['node_id'],
+                                     device=device['device_id'],
+                                     control=event.jhat.hat,
+                                     value=event.jhat.value).send(self._events_socket)
                 time.sleep(__LOOP_SLEEP_TIME__)
 
         except HidEventLoopQuit:
             pass  # normal exit
 
         finally:
-            for device in self._devices.values():
-                device.close()
+            for device in devices.values():
+                device['device'].close()
 
             SDLJoystick.sdl_quit()
