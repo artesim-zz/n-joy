@@ -15,7 +15,7 @@ class Actuator(gevent.Greenlet):
     @staticmethod
     def _zmq_setup(context, output_endpoint, identity):
         socket = context.socket(zmq.REQ)
-        socket.set_string(zmq.IDENTITY, identity)
+        socket.set(zmq.IDENTITY, identity)
         socket.connect(output_endpoint)
         return context, socket
 
@@ -36,7 +36,7 @@ class Actuator(gevent.Greenlet):
         while True:
             while len(self._output_queue) == 0:
                 gevent.sleep(0.001)
-            ControlEvent(self._output_queue.pop()).send(self._socket)
+            ControlEvent(value=self._output_queue.pop()).send(self._socket)
             ControlEvent.recv(self._socket)
 
 # EOF

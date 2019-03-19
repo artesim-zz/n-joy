@@ -2,7 +2,7 @@ import collections
 import gevent
 import zmq.green as zmq
 
-from njoy_core.common.messages import NamedControlEvent
+from njoy_core.common.messages import ControlEvent
 
 
 class FilteringBuffer(gevent.Greenlet):
@@ -25,7 +25,7 @@ class FilteringBuffer(gevent.Greenlet):
         while True:
             # Consume the input events as fast as we can, collecting the states in a dict.
             # Older unprocessed states are discarded.
-            event = NamedControlEvent.recv(self._socket)
+            event = ControlEvent.recv(self._socket)
 
             if event.identity not in input_values:
                 input_values[event.identity] = event.value
