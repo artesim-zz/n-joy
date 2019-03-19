@@ -4,7 +4,6 @@ import gevent.pool
 
 from njoy_core.core.control import TmpOneToOneControl
 from njoy_core.common.messages import ControlEvent
-from njoy_core.common.messages import NamedControlEvent
 
 ZMQ_CONTEXT = zmq.Context()
 
@@ -17,15 +16,17 @@ class MockInputRouter(gevent.Greenlet):
         self._socket.bind(endpoint)
 
     def _run(self):
-        identities = ['id{:d}'.format(1 + i) for i in range(10)]
+        identities = [{'node': 0, 'device': 0, 'control': i}
+                      for i in range(10)]
         sent = 0
         while True:
             identity = random.choice(identities)
-            if identity == 'id7':
+            if identity['control'] == 7:
                 value = random.uniform(-1, 1)
             else:
                 value = 1 == random.randint(0, 1)
-            NamedControlEvent(identity, value).send(self._socket)
+
+            ControlEvent(**identity, value=value).send(self._socket)
             sent += 1
             if sent % 1000 == 0:
                 print("Router: sent {} messages".format(sent))
@@ -47,14 +48,14 @@ class MockOutputRouter(gevent.Greenlet):
     def _run(self):
         received = 0
         while True:
-            event = ControlEvent.recv(self._socket)
+            ControlEvent.recv(self._socket)
             received += 1
             if received % 100 == 0:
                 print("Router: received {} messages".format(received))
             ControlEvent().send(self._socket)
 
 
-if __name__ == '__main__':
+def main():
     random.seed()
 
     router_in = MockInputRouter(context=ZMQ_CONTEXT,
@@ -65,24 +66,26 @@ if __name__ == '__main__':
 
     controls = [TmpOneToOneControl(context=ZMQ_CONTEXT,
                                    input_endpoint='inproc://input',
-                                   input_identities=['id1'],
+                                   input_identities=[ControlEvent(node=0, device=0, control=1).identity],
                                    output_endpoint='inproc://output',
-                                   identity='button_1'),
+                                   identity=ControlEvent(node=0, device=0, control=0).identity),
                 TmpOneToOneControl(context=ZMQ_CONTEXT,
                                    input_endpoint='inproc://input',
-                                   input_identities=['id1', 'id2', 'id3'],
+                                   input_identities=[ControlEvent(node=0, device=0, control=1).identity,
+                                                     ControlEvent(node=0, device=0, control=2).identity,
+                                                     ControlEvent(node=0, device=0, control=3).identity],
                                    output_endpoint='inproc://output',
-                                   identity='multi_buttons'),
+                                   identity=ControlEvent(node=0, device=0, control=1).identity),
                 TmpOneToOneControl(context=ZMQ_CONTEXT,
                                    input_endpoint='inproc://input',
-                                   input_identities=['id3'],
+                                   input_identities=[ControlEvent(node=0, device=0, control=3).identity],
                                    output_endpoint='inproc://output',
-                                   identity='button_2'),
+                                   identity=ControlEvent(node=0, device=0, control=2).identity),
                 TmpOneToOneControl(context=ZMQ_CONTEXT,
                                    input_endpoint='inproc://input',
-                                   input_identities=['id7'],
+                                   input_identities=[ControlEvent(node=0, device=0, control=7).identity],
                                    output_endpoint='inproc://output',
-                                   identity='axis')]
+                                   identity=ControlEvent(node=0, device=0, control=3).identity)]
 
     grp = gevent.pool.Group()
     grp.start(router_in)
@@ -90,5 +93,9 @@ if __name__ == '__main__':
         grp.start(control)
     grp.start(router_out)
     grp.join()
+
+
+if __name__ == '__main__':
+    main()
 
 # EOF

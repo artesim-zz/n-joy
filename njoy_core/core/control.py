@@ -24,18 +24,13 @@ class Control(gevent.Greenlet):
         grp.start(self._buffer)
         grp.start(self._actuator)
 
-        i = 0
         while True:
             values = self._buffer.input_values
             if values is not None:
                 self._actuator.value = self._process(values)
-            else:
-                # Wait a millisecond between each read attempt, to give a chance for other greenlets to run
-                gevent.sleep(0.001)
 
-            if i % 1000 == 0:
-                print("{}: processed {} messages".format(self.identity, i))
-            i += 1
+            # Wait a millisecond between each read attempt, to give a chance for other greenlets to run
+            gevent.sleep(0.001)
 
 
 class TmpOneToOneControl(Control):
