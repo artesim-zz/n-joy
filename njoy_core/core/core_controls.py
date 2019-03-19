@@ -1,15 +1,15 @@
 import gevent.pool
 
-from .filtering_buffer import FilteringBuffer
-from .actuator import Actuator
+from .input_buffers import InputBuffer
+from .actuators import Actuator
 
 
-class Control(gevent.Greenlet):
+class CoreControl(gevent.Greenlet):
     def __init__(self, context, input_endpoint, input_identities, output_endpoint, identity):
         super().__init__()
-        self._buffer = FilteringBuffer(context=context,
-                                       input_endpoint=input_endpoint,
-                                       input_identities=input_identities)
+        self._buffer = InputBuffer(context=context,
+                                   input_endpoint=input_endpoint,
+                                   input_identities=input_identities)
         self._actuator = Actuator(context=context,
                                   output_endpoint=output_endpoint,
                                   identity=identity)
@@ -33,7 +33,7 @@ class Control(gevent.Greenlet):
             gevent.sleep(0.001)
 
 
-class TmpOneToOneControl(Control):
+class TmpOneToOneControl(CoreControl):
     def _process(self, values):
         if all([isinstance(v, bool) for v in values.values()]):
             return all(values.values())

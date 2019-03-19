@@ -2,7 +2,7 @@ import random
 import zmq.green as zmq
 import gevent.pool
 
-from njoy_core.core.actuator import Actuator
+from njoy_core.core.actuators import Actuator
 from njoy_core.common.messages import HatValue, ControlEvent
 
 ZMQ_CONTEXT = zmq.Context()
@@ -59,7 +59,7 @@ class MockAxis(MockControl):
         self._actuator.value = random.uniform(-1.0, 1.0)
 
 
-class MockRouter(gevent.Greenlet):
+class MockOutputMultiplexer(gevent.Greenlet):
     def __init__(self, context, endpoint):
         super().__init__()
         self._ctx = context
@@ -91,14 +91,14 @@ def main():
                     output_endpoint='inproc://output',
                     identity=ControlEvent(node=2, device=2, control=2).identity)
 
-    router = MockRouter(context=ZMQ_CONTEXT,
-                        endpoint='inproc://output')
+    output_multiplexer = MockOutputMultiplexer(context=ZMQ_CONTEXT,
+                                               endpoint='inproc://output')
 
     grp = gevent.pool.Group()
     grp.start(button)
     grp.start(hat)
     grp.start(axis)
-    grp.start(router)
+    grp.start(output_multiplexer)
     grp.join()
 
 

@@ -2,13 +2,13 @@ import random
 import zmq.green as zmq
 import gevent.pool
 
-from njoy_core.core.filtering_buffer import FilteringBuffer
+from njoy_core.core.input_buffers import InputBuffer
 from njoy_core.common.messages import ControlEvent
 
 ZMQ_CONTEXT = zmq.Context()
 
 
-class MockRouter(gevent.Greenlet):
+class MockInputMultiplexer(gevent.Greenlet):
     def __init__(self, context, endpoint):
         super().__init__()
         self._ctx = context
@@ -24,10 +24,10 @@ class MockRouter(gevent.Greenlet):
                          value=random.randrange(2) == 1).send(self._socket)
             sent += 1
             if sent % 1000 == 0:
-                print("Router: sent {} messages".format(sent))
+                print("Input Mux: sent {} messages".format(sent))
 
             if random.randrange(10000) == 42:
-                print("Router: Pausing 5s...")
+                print("Input Mux: Pausing 5s...")
                 gevent.sleep(5)
             else:
                 gevent.sleep(0.001)
@@ -36,17 +36,17 @@ class MockRouter(gevent.Greenlet):
 class MockControl(gevent.Greenlet):
     def __init__(self, context, input_endpoint, input_identities):
         super().__init__()
-        self._filter = FilteringBuffer(context=context,
-                                       input_endpoint=input_endpoint,
-                                       input_identities=input_identities)
+        self._buffer = InputBuffer(context=context,
+                                   input_endpoint=input_endpoint,
+                                   input_identities=input_identities)
         self._value = None
 
     def _run(self):
-        self._filter.start()
+        self._buffer.start()
 
         received = 0
         while True:
-            states = self._filter.input_values
+            states = self._buffer.input_values
             if states is not None:
                 received += 1
                 if received % 100 == 0:
@@ -58,8 +58,8 @@ class MockControl(gevent.Greenlet):
 if __name__ == '__main__':
     random.seed()
 
-    router = MockRouter(context=ZMQ_CONTEXT,
-                        endpoint='inproc://input')
+    multiplexer = MockInputMultiplexer(context=ZMQ_CONTEXT,
+                                       endpoint='inproc://input')
 
     control = MockControl(context=ZMQ_CONTEXT,
                           input_endpoint='inproc://input',
@@ -67,7 +67,7 @@ if __name__ == '__main__':
                                             for i in range(3)])
 
     grp = gevent.pool.Group()
-    grp.start(router)
+    grp.start(multiplexer)
     grp.start(control)
     grp.join()
 

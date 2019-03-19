@@ -5,7 +5,7 @@ import zmq.green as zmq
 from njoy_core.common.messages import ControlEvent
 
 
-class FilteringBuffer(gevent.Greenlet):
+class InputBuffer(gevent.Greenlet):
     def __init__(self, context, input_endpoint, input_identities):
         super().__init__()
         self._ctx, self._socket = self._zmq_setup(context, input_endpoint, input_identities)

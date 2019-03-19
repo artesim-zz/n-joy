@@ -2,13 +2,13 @@ import random
 import zmq.green as zmq
 import gevent.pool
 
-from njoy_core.core.control import TmpOneToOneControl
+from njoy_core.core.core_controls import TmpOneToOneControl
 from njoy_core.common.messages import ControlEvent
 
 ZMQ_CONTEXT = zmq.Context()
 
 
-class MockInputRouter(gevent.Greenlet):
+class MockInputMultiplexer(gevent.Greenlet):
     def __init__(self, context, endpoint):
         super().__init__()
         self._ctx = context
@@ -29,16 +29,16 @@ class MockInputRouter(gevent.Greenlet):
             ControlEvent(**identity, value=value).send(self._socket)
             sent += 1
             if sent % 1000 == 0:
-                print("Router: sent {} messages".format(sent))
+                print("Mux In: sent {} messages".format(sent))
 
             if random.randrange(10000) == 42:
-                print("Router: Pausing 10s...")
+                print("Mux In: Pausing 10s...")
                 gevent.sleep(10)
             else:
                 gevent.sleep(0.001)
 
 
-class MockOutputRouter(gevent.Greenlet):
+class MockOutputMultiplexer(gevent.Greenlet):
     def __init__(self, context, endpoint):
         super().__init__()
         self._ctx = context
@@ -51,18 +51,18 @@ class MockOutputRouter(gevent.Greenlet):
             ControlEvent.recv(self._socket)
             received += 1
             if received % 100 == 0:
-                print("Router: received {} messages".format(received))
+                print("Mux Out: received {} messages".format(received))
             ControlEvent().send(self._socket)
 
 
 def main():
     random.seed()
 
-    router_in = MockInputRouter(context=ZMQ_CONTEXT,
-                                endpoint='inproc://input')
+    mux_in = MockInputMultiplexer(context=ZMQ_CONTEXT,
+                                  endpoint='inproc://input')
 
-    router_out = MockOutputRouter(context=ZMQ_CONTEXT,
-                                  endpoint='inproc://output')
+    mux_out = MockOutputMultiplexer(context=ZMQ_CONTEXT,
+                                    endpoint='inproc://output')
 
     controls = [TmpOneToOneControl(context=ZMQ_CONTEXT,
                                    input_endpoint='inproc://input',
@@ -88,10 +88,10 @@ def main():
                                    identity=ControlEvent(node=0, device=0, control=3).identity)]
 
     grp = gevent.pool.Group()
-    grp.start(router_in)
+    grp.start(mux_in)
     for control in controls:
         grp.start(control)
-    grp.start(router_out)
+    grp.start(mux_out)
     grp.join()
 
 
