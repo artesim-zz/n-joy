@@ -1,30 +1,11 @@
-import pytest
 import random
 import zmq.green as zmq
 import gevent.pool
 
 from njoy_core.core.filtering_buffer import FilteringBuffer
-from njoy_core.common.messages import NamedControlEvent
+from njoy_core.common.messages import ControlEvent
 
 ZMQ_CONTEXT = zmq.Context()
-
-
-@pytest.fixture
-def filtering_buffer():
-    return FilteringBuffer(context=ZMQ_CONTEXT,
-                           input_endpoint='inproc://input',
-                           input_identities=[i.encode('utf-8') for i in ['id1', 'id2', 'id3']])
-
-
-def test_initial_state(filtering_buffer):
-    assert filtering_buffer.input_values is None
-
-
-def test_simple_transmission(pseudo_router, filtering_buffer):
-    filtering_buffer.start()
-    input_states = [True, False, True]
-    pseudo_router(input_states)
-    assert pseudo_router.states == input_states
 
 
 class MockRouter(gevent.Greenlet):
@@ -35,19 +16,19 @@ class MockRouter(gevent.Greenlet):
         self._socket.bind(endpoint)
 
     def _run(self):
-        identities = ['id{:d}'.format(1 + i) for i in range(6)]
+        identities = [{'node': 0, 'device': 0, 'control': i}
+                      for i in range(6)]
         sent = 0
         while True:
-            for identity in random.choices(identities, k=3):
-                state = 1 == random.randint(0, 1)
-                NamedControlEvent(identity, state).send(self._socket)
-                sent += 1
-                if sent % 1000 == 0:
-                    print("Router: sent {} messages".format(sent))
+            ControlEvent(**random.choice(identities),
+                         value=random.randrange(2) == 1).send(self._socket)
+            sent += 1
+            if sent % 1000 == 0:
+                print("Router: sent {} messages".format(sent))
 
             if random.randrange(10000) == 42:
-                print("Router: Pausing 10s...")
-                gevent.sleep(10)
+                print("Router: Pausing 5s...")
+                gevent.sleep(5)
             else:
                 gevent.sleep(0.001)
 
@@ -70,12 +51,8 @@ class MockControl(gevent.Greenlet):
                 received += 1
                 if received % 100 == 0:
                     print("Control: received {} messages".format(received))
-            i = 0
-            for _ in range(random.randint(10000,
-                                          11000)):
-                i += 1
 
-            gevent.sleep(0.001)
+            gevent.sleep(0.001 * random.randint(1, 200))
 
 
 if __name__ == '__main__':
@@ -86,7 +63,8 @@ if __name__ == '__main__':
 
     control = MockControl(context=ZMQ_CONTEXT,
                           input_endpoint='inproc://input',
-                          input_identities=['id1', 'id2', 'id3'])
+                          input_identities=[ControlEvent(node=0, device=0, control=i).identity
+                                            for i in range(3)])
 
     grp = gevent.pool.Group()
     grp.start(router)

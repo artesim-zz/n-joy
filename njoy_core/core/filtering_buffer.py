@@ -22,22 +22,23 @@ class FilteringBuffer(gevent.Greenlet):
 
     def _run(self):
         input_values = dict()
+
+        # First loop : receive inputs until we get a first full set
+        while len(input_values) != self._nb_inputs:
+            event = ControlEvent.recv(self._socket)
+            input_values[event.identity] = event.value
+
+        # Put that first full set in the output queue
+        self._output_queue.appendleft(input_values)
+
+        # Start the actual event loop : now we only test for changes
         while True:
             # Consume the input events as fast as we can, collecting the states in a dict.
             # Older unprocessed states are discarded.
             event = ControlEvent.recv(self._socket)
 
-            if event.identity not in input_values:
+            if input_values[event.identity] != event.value:
                 input_values[event.identity] = event.value
-                changed = True
-            elif input_values[event.identity] != event.value:
-                input_values[event.identity] = event.value
-                changed = True
-            else:
-                changed = False
-
-            # Once we have a full set of input values, put them in the output queue.
-            if changed and len(input_values) == self._nb_inputs:
                 self._output_queue.appendleft(input_values)
 
     @property
