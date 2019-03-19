@@ -1,4 +1,5 @@
 import enum
+import pickle
 import struct
 
 
@@ -25,54 +26,151 @@ class ControlEventKind(enum.IntFlag):
     HAT = 2
     AXIS = 4
 
+    def short_str(self):
+        if self == 1:
+            return 'button'
+        elif self == 2:
+            return 'hat'
+        elif self == 4:
+            return 'axis'
+
+    @classmethod
+    def from_value(cls, value):
+        if isinstance(value, bool):
+            return cls.BUTTON
+        elif isinstance(value, int):
+            return cls.HAT
+        elif isinstance(value, float):
+            return cls.AXIS
+
 
 class ControlEvent:
+    """
+    Anonymous ControlEvent frames:
+            | Evt Kind | Evt Val      |
+    Ready:  |     -    |                A single empty frame (used as a 'ready' signal)
+    Button: | 00000001 | 0000000.     | bool
+    Hat:    | 00000010 | 0000....     | HatValue enum
+    Axis:   | 00000100 | ........ * 8 | float (double)
+
+    ControlEvent frames:
+            |     Identity      |
+            | Node/Dev Control  | Empty | Evt Kind | Evt Val      |
+    Ready:  | ........ ........ |   -   |     -    |                Id + 2 empty frames (used as a 'ready' signal)
+    Button: | ........ ........ |   -   | 00000001 | 0000000.     | bool
+    Hat:    | ........ ........ |   -   | 00000010 | 0000....     | HatValue enum
+    Axis:   | ........ ........ |   -   | 00000100 | ........ * 8 | float (double)
+
+    Reasoning for the format of the identity frame :
+
+    Max number of nodes : 16 => [0x0 .. 0xF]
+    => We can have at most one node per device, so the max number of nodes is equal to the max number of devices
+
+    Max number of devices : 16 => [0x0 .. 0xF]
+    => We're bound by the max number of virtual output devices (vjoy API)
+
+    Max number of controls per device : 128 buttons + 8 axis + 4 hats => [0x00 .. 0x8B]
+    => We're bound by the max number of virtual output devices (vjoy API)
+
+    Summing up :
+    => The identity can be coded on 16 bits : [0x0000 .. 0xFF8B]
+    """
+
+    __IDENTITY_PACKER = struct.Struct('>H')
+
     __EVENT_KIND_PACKER__ = struct.Struct('>B')
+
     __BUTTON_VALUE_PACKER__ = struct.Struct('>?')
     __HAT_VALUE_PACKER__ = struct.Struct('>B')
     __AXIS_VALUE_PACKER__ = struct.Struct('>d')
 
-    def __init__(self, value=None):
+    # node, device, ctrl and value are keyword-only arguments (after the *)
+    def __init__(self, *, node=None, device=None, control=None, value=None):
+        self.node = node
+        self.device = device
+        self.control = control
+        self.control_kind = ControlEventKind.from_value(value)
         self.value = value
+
+    @property
+    def identity(self):
+        if self.is_event:
+            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
+                                               (self.device & 0xF) << 8 |
+                                               (self.control & 0xFF))
+        else:
+            return None
+
+    @property
+    def is_event(self):
+        return not self.is_ready_signal
+
+    @property
+    def is_ready_signal(self):
+        return any([self.node is None,
+                    self.device is None,
+                    self.control is None])
+
+    @classmethod
+    def _unpacked_identity(cls, identity):
+        unpacked = cls.__IDENTITY_PACKER.unpack(identity)
+        return ((unpacked[0] & 0xF000) >> 12,
+                (unpacked[0] & 0x0F00) >> 8,
+                (unpacked[0] & 0x00FF))
+
+    def _serialize_identity(self):
+        identity = self.identity
+
+        if identity is None:
+            return []
+        else:
+            # Adding an empty frame for compatibility with the REQ sockets, when used with a ROUTER socket
+            return [identity, b'']
 
     def _serialize_value(self):
         if self.value is None:
             return [b'']
+
         elif isinstance(self.value, bool):
             return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.BUTTON),
                     self.__BUTTON_VALUE_PACKER__.pack(self.value)]
-        elif isinstance(self.value, int):
+
+        elif isinstance(self.value, int) and (0x00 <= self.value <= 0x0F):
             return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.HAT),
                     self.__HAT_VALUE_PACKER__.pack(self.value)]
+
         elif isinstance(self.value, float):
             return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.AXIS),
                     self.__AXIS_VALUE_PACKER__.pack(self.value)]
+
         else:
             raise MessageException("Cannot serialize value : {}".format(self.value))
 
-    def _serialize(self):
-        return self._serialize_value()
-
     def send(self, socket):
-        socket.send_multipart(self._serialize())
+        frames = self._serialize_identity() + self._serialize_value()
+        socket.send_multipart(frames)
 
     @classmethod
     def _deserialize_value(cls, value_frames):
         if len(value_frames) == 1 and value_frames[0] == b'':
-            return None
+            return None  # Single-Frame 'Ready' signal
 
         elif len(value_frames) == 2:
             event_kind = cls.__EVENT_KIND_PACKER__.unpack(value_frames[0])
             event_kind = ControlEventKind(event_kind[0])
+
             if event_kind == ControlEventKind.BUTTON:
                 unpacked = cls.__BUTTON_VALUE_PACKER__.unpack(value_frames[1])
                 return unpacked[0]
+
             elif event_kind == ControlEventKind.HAT:
                 unpacked = cls.__HAT_VALUE_PACKER__.unpack(value_frames[1])
                 return unpacked[0]
+
             elif event_kind == ControlEventKind.AXIS:
                 unpacked = cls.__AXIS_VALUE_PACKER__.unpack(value_frames[1])
                 return unpacked[0]
+
             else:
                 raise MessageException("Cannot deserialize value frames : {}".format(value_frames))
         else:
@@ -80,342 +178,76 @@ class ControlEvent:
 
     @classmethod
     def _deserialize(cls, frames):
-        return {'value': cls._deserialize_value(frames)}
+        if len(frames[0]) == 2 and frames[1] == b'':
+            node, device, control = cls._unpacked_identity(frames[0])
+            return {'node': node,
+                    'device': device,
+                    'control': control,
+                    'value': cls._deserialize_value(frames[2:])}
+        else:
+            return {'node': None,
+                    'device': None,
+                    'control': None,
+                    'value': cls._deserialize_value(frames)}
 
     @classmethod
     def recv(cls, socket):
         return cls(**cls._deserialize(socket.recv_multipart()))
 
 
-class NamedControlEvent(ControlEvent):
-    def __init__(self, identity: str, value):
-        super().__init__(value)
-        self.identity = identity
-
-    def _serialize(self):
-        return [self.identity.encode('utf-8')] + self._serialize_value()
-
-    @classmethod
-    def _deserialize(cls, frames):
-        return {'identity': frames[0].decode('utf-8'),
-                'value': cls._deserialize_value(frames[1:])}
-
-
-@enum.unique
-class MessageType(enum.IntEnum):
-    HID_REQUEST = enum.auto()
-    HID_REPLY = enum.auto()
-    HID_FULL_STATE_REPLY = enum.auto()
-    HID_AXIS_EVENT = enum.auto()
-    HID_BALL_EVENT = enum.auto()
-    HID_BUTTON_EVENT = enum.auto()
-    HID_HAT_EVENT = enum.auto()
-
-
-class Message:
-    __HEADER_PACKER__ = struct.Struct('>B')
-
-    @property
-    def msg_parts(self):
-        raise NotImplementedError
-
-    @classmethod
-    def from_msg_parts(cls, msg_parts):
-        msg_type, = cls.__HEADER_PACKER__.unpack(msg_parts[0][0:cls.__HEADER_PACKER__.size])
-
-        if msg_type == MessageType.HID_REQUEST:
-            return HidRequest.from_msg_parts(msg_parts)
-
-        elif msg_type == MessageType.HID_REPLY:
-            return HidReply.from_msg_parts(msg_parts)
-
-        elif msg_type == MessageType.HID_FULL_STATE_REPLY:
-            return HidDeviceFullStateReply.from_msg_parts(msg_parts)
-
-        elif msg_type in {MessageType.HID_AXIS_EVENT,
-                          MessageType.HID_BALL_EVENT,
-                          MessageType.HID_BUTTON_EVENT,
-                          MessageType.HID_HAT_EVENT}:
-            return HidEvent.from_msg_parts(msg_parts)
+class RequestReply:
+    def __init__(self, *, command, payload):
+        self.command = command
+        self.payload = payload
 
     def send(self, socket):
-        socket.send_multipart(self.msg_parts)
-
-    @classmethod
-    def recv(cls, socket):
-        return cls.from_msg_parts(socket.recv_multipart())
-
-
-class HidRequest(Message):
-    def __init__(self, command, *args):
-        self._command = command
-        self._args = args
-
-    @property
-    def command(self):
-        return self._command
-
-    @property
-    def args(self):
-        return self._args
-
-    @property
-    def msg_header(self):
-        return self.__HEADER_PACKER__.pack(MessageType.HID_REQUEST)
-
-    @property
-    def msg_parts(self):
-        def _encoded_part(_p):
+        def _encoded_command(_p):
             if isinstance(_p, str):
                 return _p.encode('utf-8')
             elif isinstance(_p, bytes):
                 return _p
             else:
-                raise MessageException("Invalid message_part type : {}".format(type(_p)))
+                raise MessageException("Invalid command : {}".format(_p))
 
-        return [self.msg_header, _encoded_part(self._command)] + [_encoded_part(p) for p in self._args]
+        socket.send_multipart([_encoded_command(self.command)] +
+                              [pickle.dumps(frame) for frame in self.payload])
 
     @classmethod
-    def from_msg_parts(cls, msg_parts):
-        decoded_args = [arg.decode('utf-8') for arg in msg_parts[2:]]
-        return cls(msg_parts[1].decode('utf-8'), *decoded_args)
+    def recv(cls, socket):
+        frames = socket.recv_multipart()
+        return cls(command=frames[0].decode('utf-8'),
+                   payload=[pickle.loads(frame) for frame in frames[1:]])
 
 
-class HidReply(HidRequest):
-    @property
-    def msg_header(self):
-        return self.__HEADER_PACKER__.pack(MessageType.HID_REPLY)
+class InputNodeRegisterRequest(RequestReply):
+    def __init__(self, *, devices):
+        super().__init__(command='register',
+                         payload=devices)
+        self.devices = devices
 
-
-class HidDeviceFullStateReply(Message):
-    __HEADER_PACKER__ = struct.Struct('>BI')
-
-    def __init__(self, device_id, device_full_state=None, decoded_control_events=None):
-        self._device_id = device_id
-
-        if device_full_state is not None:
-            self._control_events = list()
-            for ctrl_type, ctrl_id, value in device_full_state:
-                if ctrl_type == 'axis':
-                    self._control_events.append(HidAxisEvent(device_id=device_id,
-                                                             ctrl_id=ctrl_id,
-                                                             value=value))
-                elif ctrl_type == 'ball':
-                    self._control_events.append(HidBallEvent(device_id=device_id,
-                                                             ctrl_id=ctrl_id,
-                                                             dx=value[0],
-                                                             dy=value[1]))
-                elif ctrl_type == 'button':
-                    self._control_events.append(HidButtonEvent(device_id=device_id,
-                                                               ctrl_id=ctrl_id,
-                                                               state=value))
-                elif ctrl_type == 'hat':
-                    self._control_events.append(HidHatEvent(device_id=device_id,
-                                                            ctrl_id=ctrl_id,
-                                                            value=value))
-                else:
-                    raise MessageException("Unknown control type : {}".format(ctrl_type))
-
+    @classmethod
+    def recv(cls, socket):
+        request = RequestReply.recv(socket)
+        if request.command == 'register':
+            return cls(devices=request.payload)
         else:
-            self._control_events = decoded_control_events
+            raise MessageException("Unexpected answer : {}".format(request))
 
-    def __repr__(self):
-        return '<HidDeviceFullState: {} ({} controls)>'.format(self._device_id, len(self._control_events))
 
-    @property
-    def device_id(self):
-        return self._device_id
-
-    @property
-    def control_events(self):
-        return self._control_events
-
-    @property
-    def msg_parts(self):
-        msg_parts = [self.__HEADER_PACKER__.pack(MessageType.HID_FULL_STATE_REPLY, self._device_id)]
-        for control_event in self._control_events:
-            msg_parts.extend(control_event.msg_parts)
-        return msg_parts
+class InputNodeRegisterReply(RequestReply):
+    def __init__(self, *, node_id, device_ids_map):
+        super().__init__(command='registered',
+                         payload=[node_id, device_ids_map])
+        self.node_id = node_id
+        self.device_ids_map = device_ids_map
 
     @classmethod
-    def from_msg_parts(cls, msg_parts):
-        _, device_id = cls.__HEADER_PACKER__.unpack(msg_parts[0])
-        return cls(device_id=device_id,
-                   decoded_control_events=[Message.from_msg_parts(msg_parts[i:i+2])
-                                           for i in range(1, len(msg_parts) - 1, 2)])
-
-
-class HidEvent(Message):
-    __HEADER_PACKER__ = struct.Struct('>BII')
-
-    def __init__(self, device_id, ctrl_id):
-        self._msg_type = NotImplemented
-        self._device_id = device_id
-        self._ctrl_id = ctrl_id
-
-    def __hash__(self):
-        return hash(self.as_key)
-
-    def __lt__(self, other):
-        return self.as_key < other.as_key
-
-    @property
-    def as_key(self):
-        return self._device_id, self._msg_type, self._ctrl_id
-
-    @property
-    def msg_type(self):
-        return self._msg_type
-
-    @property
-    def device_id(self):
-        return self._device_id
-
-    @property
-    def ctrl_id(self):
-        return self._ctrl_id
-
-    @property
-    def msg_header(self):
-        return self.__HEADER_PACKER__.pack(self._msg_type, self._device_id, self._ctrl_id)
-
-    @property
-    def msg_parts(self):
-        raise NotImplementedError
-
-    @classmethod
-    def from_msg_parts(cls, msg_parts):
-        msg_type, device_id, ctrl_id = cls.__HEADER_PACKER__.unpack(msg_parts[0])
-
-        if msg_type == MessageType.HID_AXIS_EVENT:
-            return HidAxisEvent(device_id=device_id,
-                                ctrl_id=ctrl_id,
-                                value=HidAxisEvent.from_value_parts(*msg_parts[1:]))
-
-        elif msg_type == MessageType.HID_BALL_EVENT:
-            dx, dy = HidBallEvent.from_value_parts(*msg_parts[1:])
-            return HidBallEvent(device_id=device_id,
-                                ctrl_id=ctrl_id,
-                                dx=dx,
-                                dy=dy)
-
-        elif msg_type == MessageType.HID_BUTTON_EVENT:
-            return HidButtonEvent(device_id=device_id,
-                                  ctrl_id=ctrl_id,
-                                  state=HidButtonEvent.from_value_parts(*msg_parts[1:]))
-
-        elif msg_type == MessageType.HID_HAT_EVENT:
-            return HidHatEvent(device_id=device_id,
-                               ctrl_id=ctrl_id,
-                               value=HatValue(HidHatEvent.from_value_parts(*msg_parts[1:])))
-
+    def recv(cls, socket):
+        reply = RequestReply.recv(socket)
+        if reply.command == 'registered':
+            return cls(node_id=reply.payload[0],
+                       device_ids_map=reply.payload[1])
         else:
-            raise MessageException("Invalid Message Type")
-
-
-class HidAxisEvent(HidEvent):
-    __VALUE_PACKER__ = struct.Struct('>h')
-
-    def __init__(self, device_id, ctrl_id, value):
-        super(HidAxisEvent, self).__init__(device_id, ctrl_id)
-        self._msg_type = MessageType.HID_AXIS_EVENT
-        self._value = value
-
-    def __repr__(self):
-        return '<HidAxisEvent: /{}/axis/{} = {}>'.format(self._device_id, self._ctrl_id, self._value)
-
-    @property
-    def value(self):
-        return self._value
-
-    @property
-    def msg_parts(self):
-        return [self.msg_header, self.__VALUE_PACKER__.pack(self._value)]
-
-    @classmethod
-    def from_value_parts(cls, value_part):
-        value, = cls.__VALUE_PACKER__.unpack(value_part)
-        return value
-
-
-class HidBallEvent(HidEvent):
-    __VALUE_PACKER__ = struct.Struct('>hh')
-
-    def __init__(self, device_id, ctrl_id, dx, dy):
-        super(HidBallEvent, self).__init__(device_id, ctrl_id)
-        self._msg_type = MessageType.HID_BALL_EVENT
-        self._dx = dx
-        self._dy = dy
-
-    def __repr__(self):
-        return '<HidBallEvent: /{}/ball/{} = ({}, {})>'.format(self._device_id,
-                                                               self._ctrl_id, self._dx, self._dy)
-
-    @property
-    def dx(self):
-        return self._dx
-
-    @property
-    def dy(self):
-        return self._dy
-
-    @property
-    def msg_parts(self):
-        return [self.msg_header, self.__VALUE_PACKER__.pack(self._dx, self._dy)]
-
-    @classmethod
-    def from_value_parts(cls, value_part):
-        dx, dy, = cls.__VALUE_PACKER__.unpack(value_part)
-        return dx, dy
-
-
-class HidButtonEvent(HidEvent):
-    __VALUE_PACKER__ = struct.Struct('>?')
-
-    def __init__(self, device_id, ctrl_id, state):
-        super(HidButtonEvent, self).__init__(device_id, ctrl_id)
-        self._msg_type = MessageType.HID_BUTTON_EVENT
-        self._state = state
-
-    def __repr__(self):
-        return '<HidButtonEvent: /{}/button/{} = {}>'.format(self._device_id, self._ctrl_id, self._state)
-
-    @property
-    def state(self):
-        return self._state
-
-    @property
-    def msg_parts(self):
-        return [self.msg_header, self.__VALUE_PACKER__.pack(self._state)]
-
-    @classmethod
-    def from_value_parts(cls, value_part):
-        state, = cls.__VALUE_PACKER__.unpack(value_part)
-        return state
-
-
-class HidHatEvent(HidEvent):
-    __VALUE_PACKER__ = struct.Struct('>B')
-
-    def __init__(self, device_id, ctrl_id, value):
-        super(HidHatEvent, self).__init__(device_id, ctrl_id)
-        self._msg_type = MessageType.HID_HAT_EVENT
-        self._value = value
-
-    def __repr__(self):
-        return '<HidHatEvent: /{}/hat/{} = {}>'.format(self._device_id, self._ctrl_id, self._value)
-
-    @property
-    def value(self):
-        return self._value
-
-    @property
-    def msg_parts(self):
-        return [self.msg_header, self.__VALUE_PACKER__.pack(self._value)]
-
-    @classmethod
-    def from_value_parts(cls, value_part):
-        value, = cls.__VALUE_PACKER__.unpack(value_part)
-        return value
+            raise MessageException("Unexpected answer : {}".format(reply))
 
 # EOF
