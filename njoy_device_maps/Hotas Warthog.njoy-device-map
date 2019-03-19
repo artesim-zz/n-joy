@@ -1,4 +1,4 @@
-InputDeviceMapping "Joystick - HOTAS Warthog":
+nJoyDeviceMap "Joystick - HOTAS Warthog":
     # Axis
     axis 0           => JOYX, JOY_X
     axis 1           => JOYY, JOY_Y
@@ -38,7 +38,7 @@ InputDeviceMapping "Joystick - HOTAS Warthog":
     button 17        => H4L, H4_LEFT
     button 18        => H4P, H4_PRESSED
 
-InputDeviceMapping "Throttle - HOTAS Warthog":
+nJoyDeviceMap "Throttle - HOTAS Warthog":
     # Axis
     axis 0                => SCX, SC_X
     axis 1                => SCY, SC_Y

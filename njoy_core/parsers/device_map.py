@@ -3,15 +3,15 @@ import lark
 import os
 
 
-__BASE_MAPPINGS_DIR__ = os.path.join(os.path.dirname(__file__),
-                                     os.path.pardir,
-                                     os.path.pardir,
-                                     'njoy_mappings')
+__BASE_DEVICE_MAPS_DIR__ = os.path.join(os.path.dirname(__file__),
+                                        os.path.pardir,
+                                        os.path.pardir,
+                                        'njoy_device_maps')
 
 __PARSER__ = lark.Lark(r"""
     ?start: device*
 
-    device: "InputDeviceMapping" name ":" controls
+    device: "nJoyDeviceMap" name ":" controls
     name: ESCAPED_STRING
     controls: control*
 
@@ -36,11 +36,11 @@ __PARSER__ = lark.Lark(r"""
 """, parser='lalr')
 
 
-class DeviceMappingException(Exception):
+class DeviceMapException(Exception):
     pass
 
 
-class ObjectsTreeTransformer(lark.Transformer):
+class DeviceMapParser(lark.Transformer):
     start = list
 
     @lark.v_args(inline=True)
@@ -106,12 +106,13 @@ class ObjectsTreeTransformer(lark.Transformer):
         return [str(alias) for alias in aliases]
 
 
-def parse_device_mappings():
-    mappings = dict()
-    for mapping_file in glob.glob(os.path.join(__BASE_MAPPINGS_DIR__, '*.njoy-mapping')):
-        with open(mapping_file) as f:
-            for mapping in ObjectsTreeTransformer().transform(__PARSER__.parse(f.read())):
-                if mapping['name'] in mappings:
-                    raise DeviceMappingException("Duplicate device mapping for {}".format(mapping['name']))
-                mappings[mapping['name']] = mapping
-    return mappings
+def parse_device_maps(*device_map_files):
+    map_files = device_map_files or glob.glob(os.path.join(__BASE_DEVICE_MAPS_DIR__, '*.njoy-device-map'))
+    device_maps = dict()
+    for map_file in map_files:
+        with open(map_file) as f:
+            for device_map in DeviceMapParser().transform(__PARSER__.parse(f.read())):
+                if device_map['name'] in device_maps:
+                    raise DeviceMapException("Duplicate device map for {}".format(device_map['name']))
+                device_maps[device_map['name']] = device_map
+    return device_maps
