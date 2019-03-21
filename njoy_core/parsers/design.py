@@ -82,5 +82,3 @@ class Design:
                                     'is_pseudo_button': True})
 
         return required_inputs, {'axes': axes, 'buttons': buttons, 'hats': hats}
-
-# EOF

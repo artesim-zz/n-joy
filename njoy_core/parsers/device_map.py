@@ -116,5 +116,3 @@ def parse_device_maps(*device_map_files):
                     raise DeviceMapException("Duplicate device map for {}".format(device_map['name']))
                 device_maps[device_map['name']] = device_map
     return device_maps
-
-# EOF

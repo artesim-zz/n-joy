@@ -70,5 +70,3 @@ if __name__ == '__main__':
     # context = zmq.Context()
     # StandaloneOutputNode(context, requests_endpoint, events_endpoint).run()
     pass
-
-# EOF

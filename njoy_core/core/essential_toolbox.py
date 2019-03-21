@@ -36,5 +36,3 @@ class Control(gevent.Greenlet):
 class Axis(Control):
     def _process(self, input_message):
         raise NotImplementedError
-
-# EOF

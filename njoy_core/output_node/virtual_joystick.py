@@ -133,5 +133,3 @@ class VirtualJoystick(threading.Thread):
         for control in self._controls:
             group.start(control)
         group.join()
-
-# EOF

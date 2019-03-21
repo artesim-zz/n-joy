@@ -54,5 +54,3 @@ class ButtonActuator(Actuator):
 
 class HatActuator(Actuator):
     pass
-
-# EOF

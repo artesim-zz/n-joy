@@ -302,5 +302,3 @@ class OutputNodeAssignments(CoreRequest):
     @property
     def assignments(self):
         return self.payload[1]
-
-# EOF
