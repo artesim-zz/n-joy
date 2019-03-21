@@ -2,8 +2,8 @@ import random
 import zmq.green as zmq
 import gevent.pool
 
-from njoy_core.core.core_controls import TmpOneToOneControl
-from njoy_core.common.messages import ControlEvent
+from njoy_core.core.core_controls import Axis, Button, Hat, PseudoButton
+from njoy_core.common.messages import HatValue, ControlEvent, ControlEventKind, control_identity
 
 ZMQ_CONTEXT = zmq.Context()
 
@@ -21,10 +21,12 @@ class MockInputMultiplexer(gevent.Greenlet):
         sent = 0
         while True:
             identity = random.choice(identities)
-            if identity['control'] == 7:
+            if identity['control'] in {7, 8}:
                 value = random.uniform(-1, 1)
+            elif identity['control'] in {9}:
+                value = random.choice(HatValue.list())
             else:
-                value = 1 == random.randint(0, 1)
+                value = random.choice([False, True])
 
             ControlEvent(**identity, value=value).send(self._socket)
             sent += 1
@@ -64,28 +66,28 @@ def main():
     mux_out = MockOutputMultiplexer(context=ZMQ_CONTEXT,
                                     endpoint='inproc://output')
 
-    controls = [TmpOneToOneControl(context=ZMQ_CONTEXT,
-                                   input_endpoint='inproc://input',
-                                   input_identities=[ControlEvent(node=0, device=0, control=1).identity],
-                                   output_endpoint='inproc://output',
-                                   identity=ControlEvent(node=0, device=0, control=0).identity),
-                TmpOneToOneControl(context=ZMQ_CONTEXT,
-                                   input_endpoint='inproc://input',
-                                   input_identities=[ControlEvent(node=0, device=0, control=1).identity,
-                                                     ControlEvent(node=0, device=0, control=2).identity,
-                                                     ControlEvent(node=0, device=0, control=3).identity],
-                                   output_endpoint='inproc://output',
-                                   identity=ControlEvent(node=0, device=0, control=1).identity),
-                TmpOneToOneControl(context=ZMQ_CONTEXT,
-                                   input_endpoint='inproc://input',
-                                   input_identities=[ControlEvent(node=0, device=0, control=3).identity],
-                                   output_endpoint='inproc://output',
-                                   identity=ControlEvent(node=0, device=0, control=2).identity),
-                TmpOneToOneControl(context=ZMQ_CONTEXT,
-                                   input_endpoint='inproc://input',
-                                   input_identities=[ControlEvent(node=0, device=0, control=7).identity],
-                                   output_endpoint='inproc://output',
-                                   identity=ControlEvent(node=0, device=0, control=3).identity)]
+    controls = [Axis(context=ZMQ_CONTEXT,
+                     input_endpoint='inproc://input',
+                     input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=7)],
+                     output_endpoint='inproc://output',
+                     identity=control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=0)),
+                Button(context=ZMQ_CONTEXT,
+                       input_endpoint='inproc://input',
+                       input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=0)],
+                       output_endpoint='inproc://output',
+                       identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1)),
+                Hat(context=ZMQ_CONTEXT,
+                    input_endpoint='inproc://input',
+                    input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=9)],
+                    output_endpoint='inproc://output',
+                    identity=control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=2)),
+                PseudoButton(context=ZMQ_CONTEXT,
+                             input_endpoint='inproc://input',
+                             input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1),
+                                               control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=2),
+                                               control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3)],
+                             output_endpoint='inproc://output',
+                             identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3))]
 
     grp = gevent.pool.Group()
     grp.start(mux_in)

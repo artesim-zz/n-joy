@@ -19,47 +19,58 @@ class HatValue(enum.IntFlag):
     HAT_DOWN_RIGHT = HAT_DOWN | HAT_RIGHT
     HAT_DOWN_LEFT = HAT_DOWN | HAT_LEFT
 
+    @classmethod
+    def list(cls):
+        return [v for v in cls]
+
+    @classmethod
+    def set(cls):
+        return {v for v in cls}
+
 
 @enum.unique
 class ControlEventKind(enum.IntFlag):
-    BUTTON = 1
-    HAT = 2
-    AXIS = 4
+    AXIS = enum.auto()
+    BUTTON = enum.auto()
+    HAT = enum.auto()
 
     def short_str(self):
-        if self == 1:
-            return 'button'
-        elif self == 2:
-            return 'hat'
-        elif self == 4:
-            return 'axis'
+        return {ControlEventKind.AXIS: 'axis',
+                ControlEventKind.BUTTON: 'button',
+                ControlEventKind.HAT: 'hat'}[self.value]
 
-    @classmethod
-    def from_value(cls, value):
-        if isinstance(value, bool):
-            return cls.BUTTON
-        elif isinstance(value, int):
-            return cls.HAT
-        elif isinstance(value, float):
-            return cls.AXIS
+    @staticmethod
+    def from_value(value):
+        if isinstance(value, float):
+            return ControlEventKind.AXIS
+        elif isinstance(value, bool):
+            return ControlEventKind.BUTTON
+        elif isinstance(value, int) and value in HatValue.set():
+            return ControlEventKind.HAT
+        else:
+            return None
+
+
+def control_identity(node, device, kind, control):
+    return ControlEvent(node=node, device=device, kind=kind, control=control).identity
 
 
 class ControlEvent:
     """
     Anonymous ControlEvent frames:
-            | Evt Kind | Evt Val      |
-    Ready:  |     -    |                A single empty frame (used as a 'ready' signal)
-    Button: | 00000001 | 0000000.     | bool
-    Hat:    | 00000010 | 0000....     | HatValue enum
-    Axis:   | 00000100 | ........ * 8 | float (double)
+            | Evt Val      |
+    Ready:  |     -        | A single empty frame (used as a 'ready' signal)
+    Axis:   | vvvvvvvv * 8 | float (double)
+    Button: | 0000000v     | bool          (MSB = 0)
+    Hat:    | 1000vvvv     | HatValue enum (MSB = 1)
 
     ControlEvent frames:
             |     Identity      |
-            | Node/Dev Control  | Empty | Evt Kind | Evt Val      |
-    Ready:  | ........ ........ |   -   |     -    |                Id + 2 empty frames (used as a 'ready' signal)
-    Button: | ........ ........ |   -   | 00000001 | 0000000.     | bool
-    Hat:    | ........ ........ |   -   | 00000010 | 0000....     | HatValue enum
-    Axis:   | ........ ........ |   -   | 00000100 | ........ * 8 | float (double)
+            | Node+Dev Kind+Ctrl| Empty | Evt Val      |
+    Ready:  | nnnndddd ........ |   -   |     -        | Id + 2 empty frames (used as a 'ready' signal)
+    Axis:   | nnnndddd 10000ccc |   -   | vvvvvvvv * 8 | float (double)
+    Button: | nnnndddd 0ccccccc |   -   | 0000000v     | bool          (MSB = 0)
+    Hat:    | nnnndddd 110000cc |   -   | 1000vvvv     | HatValue enum (MSB = 1)
 
     Reasoning for the format of the identity frame :
 
@@ -69,35 +80,48 @@ class ControlEvent:
     Max number of devices : 16 => [0x0 .. 0xF]
     => We're bound by the max number of virtual output devices (vjoy API)
 
-    Max number of controls per device : 128 buttons + 8 axis + 4 hats => [0x00 .. 0x8B]
+    Max number of axes per device    :   8 => [0x0  ..  0x7] => MSB kind = 10, control_id on 3 LSB bits
+    Max number of buttons per device : 128 => [0x00 .. 0x7F] => MSB kind = 0,  control_id on 7 remaining LSB bits
+    Max number of hats per device    :   4 => [0x0  ..  0x3] => MSB kind = 11, control_id on 2 LSB bits
     => We're bound by the max number of virtual output devices (vjoy API)
 
     Summing up :
-    => The identity can be coded on 16 bits : [0x0000 .. 0xFF8B]
+    => The identity can be coded on 2 bytes
     """
 
     __IDENTITY_PACKER = struct.Struct('>H')
-
-    __EVENT_KIND_PACKER__ = struct.Struct('>B')
 
     __BUTTON_VALUE_PACKER__ = struct.Struct('>?')
     __HAT_VALUE_PACKER__ = struct.Struct('>B')
     __AXIS_VALUE_PACKER__ = struct.Struct('>d')
 
     # node, device, ctrl and value are keyword-only arguments (after the *)
-    def __init__(self, *, node=None, device=None, control=None, value=None):
+    def __init__(self, *, node=None, device=None, kind=None, control=None, value=None):
         self.node = node
         self.device = device
+        self.kind = kind or ControlEventKind.from_value(value)
         self.control = control
-        self.control_kind = ControlEventKind.from_value(value)
         self.value = value
 
     @property
     def identity(self):
         if self.is_event:
-            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
-                                               (self.device & 0xF) << 8 |
-                                               (self.control & 0xFF))
+            if self.kind is ControlEventKind.AXIS:
+                return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
+                                                   (self.device & 0xF) << 8 |
+                                                   0x80 |
+                                                   (self.control & 0x07))
+            elif self.kind is ControlEventKind.BUTTON:
+                return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
+                                                   (self.device & 0xF) << 8 |
+                                                   (self.control & 0x7F))
+            elif self.kind is ControlEventKind.HAT:
+                return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
+                                                   (self.device & 0xF) << 8 |
+                                                   0xC0 |
+                                                   (self.control & 0x03))
+            else:
+                return None
         else:
             return None
 
@@ -109,14 +133,22 @@ class ControlEvent:
     def is_ready_signal(self):
         return any([self.node is None,
                     self.device is None,
+                    self.kind is None,
                     self.control is None])
 
     @classmethod
     def _unpacked_identity(cls, identity):
+        kinds = {0x0080: ControlEventKind.AXIS,
+                 0x0000: ControlEventKind.BUTTON,
+                 0x00C0: ControlEventKind.HAT}
+        control_masks = {0x0080: 0x0007,
+                         0x0000: 0x007F,
+                         0x00C0: 0x0003}
         unpacked = cls.__IDENTITY_PACKER.unpack(identity)
-        return ((unpacked[0] & 0xF000) >> 12,
-                (unpacked[0] & 0x0F00) >> 8,
-                (unpacked[0] & 0x00FF))
+        return ((unpacked[0] & 0xF000) >> 12,                       # node
+                (unpacked[0] & 0x0F00) >> 8,                        # device
+                kinds[unpacked[0] & 0x00C0],                        # kind
+                unpacked[0] & control_masks[unpacked[0] & 0x00C0])  # control
 
     def _serialize_identity(self):
         identity = self.identity
@@ -131,17 +163,14 @@ class ControlEvent:
         if self.value is None:
             return [b'']
 
+        if isinstance(self.value, float):
+            return [self.__AXIS_VALUE_PACKER__.pack(self.value)]
+
         elif isinstance(self.value, bool):
-            return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.BUTTON),
-                    self.__BUTTON_VALUE_PACKER__.pack(self.value)]
+            return [self.__BUTTON_VALUE_PACKER__.pack(self.value)]
 
         elif isinstance(self.value, int) and (0x00 <= self.value <= 0x0F):
-            return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.HAT),
-                    self.__HAT_VALUE_PACKER__.pack(self.value)]
-
-        elif isinstance(self.value, float):
-            return [self.__EVENT_KIND_PACKER__.pack(ControlEventKind.AXIS),
-                    self.__AXIS_VALUE_PACKER__.pack(self.value)]
+            return [self.__HAT_VALUE_PACKER__.pack(self.value | 0x80)]
 
         else:
             raise MessageException("Cannot serialize value : {}".format(self.value))
@@ -152,41 +181,37 @@ class ControlEvent:
 
     @classmethod
     def _deserialize_value(cls, value_frames):
-        if len(value_frames) == 1 and value_frames[0] == b'':
+        if value_frames[0] == b'':
             return None  # Single-Frame 'Ready' signal
 
-        elif len(value_frames) == 2:
-            event_kind = cls.__EVENT_KIND_PACKER__.unpack(value_frames[0])
-            event_kind = ControlEventKind(event_kind[0])
+        elif len(value_frames[0]) == 8:
+            unpacked = cls.__AXIS_VALUE_PACKER__.unpack(value_frames[0])
+            return unpacked[0]
 
-            if event_kind == ControlEventKind.BUTTON:
-                unpacked = cls.__BUTTON_VALUE_PACKER__.unpack(value_frames[1])
-                return unpacked[0]
+        elif len(value_frames[0]) == 1 and value_frames[0][0] & 0x80 == 0x00:
+            unpacked = cls.__BUTTON_VALUE_PACKER__.unpack(value_frames[0])
+            return unpacked[0]
 
-            elif event_kind == ControlEventKind.HAT:
-                unpacked = cls.__HAT_VALUE_PACKER__.unpack(value_frames[1])
-                return unpacked[0]
+        elif len(value_frames[0]) == 1 and value_frames[0][0] & 0x80 == 0x80:
+            unpacked = cls.__HAT_VALUE_PACKER__.unpack(value_frames[0])
+            return unpacked[0] & 0x0F
 
-            elif event_kind == ControlEventKind.AXIS:
-                unpacked = cls.__AXIS_VALUE_PACKER__.unpack(value_frames[1])
-                return unpacked[0]
-
-            else:
-                raise MessageException("Cannot deserialize value frames : {}".format(value_frames))
         else:
             raise MessageException("Cannot deserialize value frames : {}".format(value_frames))
 
     @classmethod
     def _deserialize(cls, frames):
         if len(frames[0]) == 2 and frames[1] == b'':
-            node, device, control = cls._unpacked_identity(frames[0])
+            node, device, kind, control = cls._unpacked_identity(frames[0])
             return {'node': node,
                     'device': device,
+                    'kind': kind,
                     'control': control,
                     'value': cls._deserialize_value(frames[2:])}
         else:
             return {'node': None,
                     'device': None,
+                    'kind': None,
                     'control': None,
                     'value': cls._deserialize_value(frames)}
 
@@ -195,7 +220,7 @@ class ControlEvent:
         return cls(**cls._deserialize(socket.recv_multipart()))
 
 
-class RequestReply:
+class CoreRequest:
     def __init__(self, *, command, payload):
         self.command = command
         self.payload = payload
@@ -215,39 +240,67 @@ class RequestReply:
     @classmethod
     def recv(cls, socket):
         frames = socket.recv_multipart()
-        return cls(command=frames[0].decode('utf-8'),
-                   payload=[pickle.loads(frame) for frame in frames[1:]])
+        command = frames[0].decode('utf-8')
+        payload = [pickle.loads(frame) for frame in frames[1:]]
+        if command == 'register':
+            return InputNodeRegisterRequest(devices=payload)
+        elif command == 'registered':
+            return InputNodeRegisterReply(node_id=payload[0],
+                                          device_ids_map=payload[1])
+        elif command == 'capabilities':
+            return OutputNodeCapabilities(capabilities=payload)
+        elif command == 'assignments':
+            return OutputNodeAssignments(node_id=payload[0],
+                                         assignments=payload[1])
+        else:
+            return cls(command=command, payload=payload)
 
 
-class InputNodeRegisterRequest(RequestReply):
+class InputNodeRegisterRequest(CoreRequest):
     def __init__(self, *, devices):
         super().__init__(command='register',
                          payload=devices)
-        self.devices = devices
 
-    @classmethod
-    def recv(cls, socket):
-        request = RequestReply.recv(socket)
-        if request.command == 'register':
-            return cls(devices=request.payload)
-        else:
-            raise MessageException("Unexpected answer : {}".format(request))
+    @property
+    def devices(self):
+        return self.payload
 
 
-class InputNodeRegisterReply(RequestReply):
+class InputNodeRegisterReply(CoreRequest):
     def __init__(self, *, node_id, device_ids_map):
         super().__init__(command='registered',
                          payload=[node_id, device_ids_map])
-        self.node_id = node_id
-        self.device_ids_map = device_ids_map
 
-    @classmethod
-    def recv(cls, socket):
-        reply = RequestReply.recv(socket)
-        if reply.command == 'registered':
-            return cls(node_id=reply.payload[0],
-                       device_ids_map=reply.payload[1])
-        else:
-            raise MessageException("Unexpected answer : {}".format(reply))
+    @property
+    def node_id(self):
+        return self.payload[0]
+
+    @property
+    def device_ids_map(self):
+        return self.payload[1]
+
+
+class OutputNodeCapabilities(CoreRequest):
+    def __init__(self, *, capabilities):
+        super().__init__(command='capabilities',
+                         payload=capabilities)
+
+    @property
+    def capabilities(self):
+        return self.payload
+
+
+class OutputNodeAssignments(CoreRequest):
+    def __init__(self, *, node_id, assignments):
+        super().__init__(command='assignments',
+                         payload=[node_id, assignments])
+
+    @property
+    def node_id(self):
+        return self.payload[0]
+
+    @property
+    def assignments(self):
+        return self.payload[1]
 
 # EOF

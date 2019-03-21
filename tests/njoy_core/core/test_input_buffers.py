@@ -3,7 +3,7 @@ import zmq.green as zmq
 import gevent.pool
 
 from njoy_core.core.input_buffers import InputBuffer
-from njoy_core.common.messages import ControlEvent
+from njoy_core.common.messages import ControlEvent, ControlEventKind, control_identity
 
 ZMQ_CONTEXT = zmq.Context()
 
@@ -16,7 +16,7 @@ class MockInputMultiplexer(gevent.Greenlet):
         self._socket.bind(endpoint)
 
     def _run(self):
-        identities = [{'node': 0, 'device': 0, 'control': i}
+        identities = [{'node': 0, 'device': 0, 'kind': ControlEventKind.BUTTON, 'control': i}
                       for i in range(6)]
         sent = 0
         while True:
@@ -63,7 +63,10 @@ if __name__ == '__main__':
 
     control = MockControl(context=ZMQ_CONTEXT,
                           input_endpoint='inproc://input',
-                          input_identities=[ControlEvent(node=0, device=0, control=i).identity
+                          input_identities=[control_identity(node=0,
+                                                             device=0,
+                                                             kind=ControlEventKind.BUTTON,
+                                                             control=i)
                                             for i in range(3)])
 
     grp = gevent.pool.Group()

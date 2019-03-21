@@ -12,7 +12,7 @@ from njoy_core.input_node import EmbeddedInputNode
 ZMQ_CONTEXT = zmq.Context()
 
 
-class MockInputRouter(gevent.Greenlet):
+class MockInputMultiplexer(gevent.Greenlet):
     def __init__(self, context, events_endpoint, requests_endpoint):
         super().__init__()
         self._ctx = context
@@ -28,7 +28,7 @@ class MockInputRouter(gevent.Greenlet):
             msg = ControlEvent.recv(socket)
             print("InputRouter: /Node{}/{}/{}/{} = {}".format(msg.node,
                                                               self._registered_devices[msg.node][msg.device],
-                                                              msg.control_kind.short_str(),
+                                                              msg.kind.short_str(),
                                                               msg.control,
                                                               msg.value))
 
@@ -51,17 +51,17 @@ class MockInputRouter(gevent.Greenlet):
 
 
 def main():
-    router = MockInputRouter(context=ZMQ_CONTEXT,
-                             events_endpoint='inproc://router_events',
-                             requests_endpoint='inproc://router_requests')
+    mux_in = MockInputMultiplexer(context=ZMQ_CONTEXT,
+                                  events_endpoint='inproc://router_events',
+                                  requests_endpoint='inproc://router_requests')
 
     input_node = EmbeddedInputNode(context=ZMQ_CONTEXT,
                                    events_endpoint='inproc://router_events',
                                    requests_endpoint='inproc://router_requests')
 
-    router.start()
+    mux_in.start()
     input_node.start()
-    router.join()
+    mux_in.join()
     input_node.join()
 
 
