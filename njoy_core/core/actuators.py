@@ -1,23 +1,20 @@
 import collections
-import gevent
-import zmq.green as zmq
+import threading
+import time
+import zmq
 
 from njoy_core.common.messages import ControlEvent
 
 
-class Actuator(gevent.Greenlet):
-    def __init__(self, context, output_endpoint, identity):
+class Actuator(threading.Thread):
+    def __init__(self, *, context, outputs, identity):
         super().__init__()
-        self._ctx, self._socket = self._zmq_setup(context, output_endpoint, identity)
+        self._ctx = context
+        self._socket = self._ctx.socket(zmq.REQ)
+        self._socket.set(zmq.IDENTITY, identity)
+        self._socket.connect(outputs)
         self._value = None
         self._output_queue = collections.deque(maxlen=1)
-
-    @staticmethod
-    def _zmq_setup(context, output_endpoint, identity):
-        socket = context.socket(zmq.REQ)
-        socket.set(zmq.IDENTITY, identity)
-        socket.connect(output_endpoint)
-        return context, socket
 
     @property
     def identity(self):
@@ -26,8 +23,8 @@ class Actuator(gevent.Greenlet):
     @property
     def value(self):
         while self._value is None:
-            # Wait a millisecond between each read attempt, to give a chance for other greenlets to run
-            gevent.sleep(0.001)
+            # Wait 100 µs between each read attempt, to give a chance for other threads to run
+            time.sleep(0.0001)
         return self._value
 
     @value.setter
@@ -36,12 +33,17 @@ class Actuator(gevent.Greenlet):
             self._value = val
             self._output_queue.appendleft(val)
 
-    def _run(self):
+    def loop(self, socket):
+        while len(self._output_queue) == 0:
+            # Wait 100 µs between each read attempt, to give a chance for other threads to run
+            time.sleep(0.0001)
+
+        ControlEvent(value=self._output_queue.pop()).send(socket)
+        ControlEvent.recv(socket)
+
+    def run(self):
         while True:
-            while len(self._output_queue) == 0:
-                gevent.sleep(0.001)
-            ControlEvent(value=self._output_queue.pop()).send(self._socket)
-            ControlEvent.recv(self._socket)
+            self.loop(self._socket)
 
 
 class AxisActuator(Actuator):

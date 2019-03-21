@@ -1,6 +1,7 @@
 import random
-import zmq.green as zmq
-import gevent.pool
+import threading
+import time
+import zmq
 
 from njoy_core.core.core_controls import Axis, Button, Hat, PseudoButton
 from njoy_core.common.messages import HatValue, ControlEvent, ControlEventKind, control_identity
@@ -8,14 +9,14 @@ from njoy_core.common.messages import HatValue, ControlEvent, ControlEventKind, 
 ZMQ_CONTEXT = zmq.Context()
 
 
-class MockInputMultiplexer(gevent.Greenlet):
+class MockInputMultiplexer(threading.Thread):
     def __init__(self, context, endpoint):
         super().__init__()
         self._ctx = context
         self._socket = context.socket(zmq.PUB)
         self._socket.bind(endpoint)
 
-    def _run(self):
+    def run(self):
         identities = [{'node': 0, 'device': 0, 'control': i}
                       for i in range(10)]
         sent = 0
@@ -35,19 +36,19 @@ class MockInputMultiplexer(gevent.Greenlet):
 
             if random.randrange(10000) == 42:
                 print("Mux In: Pausing 10s...")
-                gevent.sleep(10)
+                time.sleep(10)
             else:
-                gevent.sleep(0.001)
+                time.sleep(0.001)
 
 
-class MockOutputMultiplexer(gevent.Greenlet):
+class MockOutputMultiplexer(threading.Thread):
     def __init__(self, context, endpoint):
         super().__init__()
         self._ctx = context
         self._socket = context.socket(zmq.REP)
         self._socket.bind(endpoint)
 
-    def _run(self):
+    def run(self):
         received = 0
         while True:
             ControlEvent.recv(self._socket)
@@ -60,41 +61,39 @@ class MockOutputMultiplexer(gevent.Greenlet):
 def main():
     random.seed()
 
-    mux_in = MockInputMultiplexer(context=ZMQ_CONTEXT,
-                                  endpoint='inproc://input')
+    threads = [MockInputMultiplexer(context=ZMQ_CONTEXT,
+                                    endpoint='inproc://input'),
+               MockOutputMultiplexer(context=ZMQ_CONTEXT,
+                                     endpoint='inproc://output'),
+               Axis(context=ZMQ_CONTEXT,
+                    inputs='inproc://input',
+                    input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=7)],
+                    outputs='inproc://output',
+                    identity=control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=0)),
+               Button(context=ZMQ_CONTEXT,
+                      inputs='inproc://input',
+                      input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=0)],
+                      outputs='inproc://output',
+                      identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1)),
+               Hat(context=ZMQ_CONTEXT,
+                   inputs='inproc://input',
+                   input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=9)],
+                   outputs='inproc://output',
+                   identity=control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=2)),
+               PseudoButton(context=ZMQ_CONTEXT,
+                            inputs='inproc://input',
+                            input_identities=[
+                                control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1),
+                                control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=2),
+                                control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3)],
+                            outputs='inproc://output',
+                            identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3))]
 
-    mux_out = MockOutputMultiplexer(context=ZMQ_CONTEXT,
-                                    endpoint='inproc://output')
+    for t in threads:
+        t.start()
 
-    controls = [Axis(context=ZMQ_CONTEXT,
-                     input_endpoint='inproc://input',
-                     input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=7)],
-                     output_endpoint='inproc://output',
-                     identity=control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=0)),
-                Button(context=ZMQ_CONTEXT,
-                       input_endpoint='inproc://input',
-                       input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=0)],
-                       output_endpoint='inproc://output',
-                       identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1)),
-                Hat(context=ZMQ_CONTEXT,
-                    input_endpoint='inproc://input',
-                    input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=9)],
-                    output_endpoint='inproc://output',
-                    identity=control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=2)),
-                PseudoButton(context=ZMQ_CONTEXT,
-                             input_endpoint='inproc://input',
-                             input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1),
-                                               control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=2),
-                                               control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3)],
-                             output_endpoint='inproc://output',
-                             identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3))]
-
-    grp = gevent.pool.Group()
-    grp.start(mux_in)
-    for control in controls:
-        grp.start(control)
-    grp.start(mux_out)
-    grp.join()
+    for t in threads:
+        t.join()
 
 
 if __name__ == '__main__':

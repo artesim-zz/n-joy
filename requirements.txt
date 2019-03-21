@@ -1,5 +1,4 @@
 pyzmq>=18
-gevent>=1.4
 PySDL2>=0.9.6
 pyvjoy
 lark-parser>=0.6.7

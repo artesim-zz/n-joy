@@ -1,15 +1,14 @@
 import random
-import zmq.green as zmq
-import gevent.pool
+import threading
+import time
+import zmq
 
 from njoy_core.common.messages import HatValue, ControlEvent
 from njoy_core.common.messages import InputNodeRegisterRequest, InputNodeRegisterReply
 from njoy_core.core import Core
 
-ZMQ_CONTEXT = zmq.Context()
 
-
-class MockInputNode(gevent.Greenlet):
+class MockInputNode(threading.Thread):
     def __init__(self, context, requests_endpoint, events_endpoint):
         super().__init__()
         self._ctx = context
@@ -30,6 +29,7 @@ class MockInputNode(gevent.Greenlet):
         return reply
 
     def _events_loop(self):
+        print("Input Node: starting event loop")
         identities = [{'node': 0, 'device': 0, 'control': i}
                       for i in range(10)]
         sent = 0
@@ -49,11 +49,11 @@ class MockInputNode(gevent.Greenlet):
 
             if random.randrange(10000) == 42:
                 print("Mux In: Pausing 10s...")
-                gevent.sleep(10)
+                time.sleep(10)
             else:
-                gevent.sleep(0.001)
+                time.sleep(0.0001)  # 100 µs
 
-    def _run(self):
+    def run(self):
         self._register()
         self._events_loop()
 
@@ -61,19 +61,22 @@ class MockInputNode(gevent.Greenlet):
 def main():
     random.seed()
 
-    input_node = MockInputNode(context=ZMQ_CONTEXT,
+    context = zmq.Context()
+
+    input_node = MockInputNode(context=context,
                                requests_endpoint='inproc://requests',
                                events_endpoint='inproc://input')
 
-    core = Core(context=ZMQ_CONTEXT,
-                input_events_endpoint='inproc://input',
-                output_events_endpoint='inproc://output',
-                requests_endpoint='inproc://requests')
+    core = Core(context=context,
+                input_events='inproc://input',
+                output_events='inproc://output',
+                requests='inproc://requests')
 
-    grp = gevent.pool.Group()
-    grp.start(input_node)
-    grp.start(core)
-    grp.join()
+    input_node.start()
+    core.start()
+
+    input_node.join()
+    core.join()
 
 
 if __name__ == '__main__':

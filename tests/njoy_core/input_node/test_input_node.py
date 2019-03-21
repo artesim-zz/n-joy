@@ -3,8 +3,8 @@
 # Need to set PYSDL2_DLL_PATH=../../../lib64/sdl2 for this test
 #
 
-import zmq.green as zmq
-import gevent.pool
+import threading
+import zmq
 
 from njoy_core.common.messages import InputNodeRegisterRequest, InputNodeRegisterReply, ControlEvent
 from njoy_core.input_node import EmbeddedInputNode
@@ -12,7 +12,7 @@ from njoy_core.input_node import EmbeddedInputNode
 ZMQ_CONTEXT = zmq.Context()
 
 
-class MockInputMultiplexer(gevent.Greenlet):
+class MockInputMultiplexer(threading.Thread):
     def __init__(self, context, events_endpoint, requests_endpoint):
         super().__init__()
         self._ctx = context
@@ -43,11 +43,13 @@ class MockInputMultiplexer(gevent.Greenlet):
             InputNodeRegisterReply(node_id=node_id,
                                    device_ids_map=self._registered_devices[node_id]).send(socket)
 
-    def _run(self):
-        grp = gevent.pool.Group()
-        grp.spawn(self._handle_input_events)
-        grp.spawn(self._handle_requests)
-        grp.join()
+    def run(self):
+        t1 = threading.Thread(target=self._handle_input_events)
+        t2 = threading.Thread(target=self._handle_requests)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
 
 
 def main():
