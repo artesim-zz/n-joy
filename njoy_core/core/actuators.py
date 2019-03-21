@@ -20,6 +20,10 @@ class Actuator(gevent.Greenlet):
         return context, socket
 
     @property
+    def identity(self):
+        return self._socket.get(zmq.IDENTITY)
+
+    @property
     def value(self):
         while self._value is None:
             # Wait a millisecond between each read attempt, to give a chance for other greenlets to run
@@ -38,5 +42,17 @@ class Actuator(gevent.Greenlet):
                 gevent.sleep(0.001)
             ControlEvent(value=self._output_queue.pop()).send(self._socket)
             ControlEvent.recv(self._socket)
+
+
+class AxisActuator(Actuator):
+    pass
+
+
+class ButtonActuator(Actuator):
+    pass
+
+
+class HatActuator(Actuator):
+    pass
 
 # EOF

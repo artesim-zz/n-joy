@@ -13,7 +13,10 @@ class CoreControl(gevent.Greenlet):
         self._actuator = Actuator(context=context,
                                   output_endpoint=output_endpoint,
                                   identity=identity)
-        self.identity = identity
+
+    @property
+    def identity(self):
+        return self._actuator.identity
 
     def _process(self, values):
         # XXX: This is where we should inject an algorithm, that somehow comes up from parsing the nJoy Design.
@@ -33,11 +36,23 @@ class CoreControl(gevent.Greenlet):
             gevent.sleep(0.001)
 
 
-class TmpOneToOneControl(CoreControl):
+class Axis(CoreControl):
     def _process(self, values):
-        if all([isinstance(v, bool) for v in values.values()]):
-            return all(values.values())
-        else:
-            return list(values.values())[0]
+        return list(values.values())[0]
+
+
+class Button(CoreControl):
+    def _process(self, values):
+        return list(values.values())[0]
+
+
+class Hat(CoreControl):
+    def _process(self, values):
+        return list(values.values())[0]
+
+
+class PseudoButton(CoreControl):
+    def _process(self, values):
+        return not any(values.values())
 
 # EOF
