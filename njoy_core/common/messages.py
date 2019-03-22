@@ -29,24 +29,24 @@ class HatValue(enum.IntFlag):
 
 
 @enum.unique
-class ControlEventKind(enum.IntFlag):
+class CtrlKind(enum.IntFlag):
     AXIS = enum.auto()
     BUTTON = enum.auto()
     HAT = enum.auto()
 
     def short_str(self):
-        return {ControlEventKind.AXIS: 'axis',
-                ControlEventKind.BUTTON: 'button',
-                ControlEventKind.HAT: 'hat'}[self.value]
+        return {CtrlKind.AXIS: 'axis',
+                CtrlKind.BUTTON: 'button',
+                CtrlKind.HAT: 'hat'}[self.value]
 
     @staticmethod
     def from_value(value):
         if isinstance(value, float):
-            return ControlEventKind.AXIS
+            return CtrlKind.AXIS
         elif isinstance(value, bool):
-            return ControlEventKind.BUTTON
+            return CtrlKind.BUTTON
         elif isinstance(value, int) and value in HatValue.set():
-            return ControlEventKind.HAT
+            return CtrlKind.HAT
         else:
             return None
 
@@ -99,23 +99,23 @@ class ControlEvent:
     def __init__(self, *, node=None, device=None, kind=None, control=None, value=None):
         self.node = node
         self.device = device
-        self.kind = kind or ControlEventKind.from_value(value)
+        self.kind = kind or CtrlKind.from_value(value)
         self.control = control
         self.value = value
 
     @property
     def identity(self):
         if self.is_event:
-            if self.kind is ControlEventKind.AXIS:
+            if self.kind is CtrlKind.AXIS:
                 return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
                                                    (self.device & 0xF) << 8 |
                                                    0x80 |
                                                    (self.control & 0x07))
-            elif self.kind is ControlEventKind.BUTTON:
+            elif self.kind is CtrlKind.BUTTON:
                 return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
                                                    (self.device & 0xF) << 8 |
                                                    (self.control & 0x7F))
-            elif self.kind is ControlEventKind.HAT:
+            elif self.kind is CtrlKind.HAT:
                 return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
                                                    (self.device & 0xF) << 8 |
                                                    0xC0 |
@@ -138,9 +138,9 @@ class ControlEvent:
 
     @classmethod
     def _unpacked_identity(cls, identity):
-        kinds = {0x0080: ControlEventKind.AXIS,
-                 0x0000: ControlEventKind.BUTTON,
-                 0x00C0: ControlEventKind.HAT}
+        kinds = {0x0080: CtrlKind.AXIS,
+                 0x0000: CtrlKind.BUTTON,
+                 0x00C0: CtrlKind.HAT}
         control_masks = {0x0080: 0x0007,
                          0x0000: 0x007F,
                          0x00C0: 0x0003}

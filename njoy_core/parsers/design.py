@@ -1,6 +1,6 @@
 import os
 
-from njoy_core.common.messages import ControlEventKind
+from njoy_core.common.messages import CtrlKind
 
 from .device_map import parse_device_maps
 
@@ -53,14 +53,14 @@ class Design:
                     for alias in control['aliases']:
                         required_inputs[device_name]['axes_by_alias'][alias] = control['id']
                     axes.append({'input_identities': [{'device': njoy_device_id,
-                                                       'kind': ControlEventKind.AXIS,
+                                                       'kind': CtrlKind.AXIS,
                                                        'control': control['id']}]})
                 elif control['type'] == 'button':
                     required_inputs[device_name]['buttons'].add(control['id'])
                     for alias in control['aliases']:
                         required_inputs[device_name]['buttons_by_alias'][alias] = control['id']
                     buttons.append({'input_identities': [{'device': njoy_device_id,
-                                                          'kind': ControlEventKind.BUTTON,
+                                                          'kind': CtrlKind.BUTTON,
                                                           'control': control['id']}],
                                     'is_pseudo_button': False})
                 elif control['type'] == 'hat':
@@ -68,7 +68,7 @@ class Design:
                     for alias in control['aliases']:
                         required_inputs[device_name]['hats_by_alias'][alias] = control['id']
                     hats.append({'input_identities': [{'device': njoy_device_id,
-                                                       'kind': ControlEventKind.HAT,
+                                                       'kind': CtrlKind.HAT,
                                                        'control': control['id']}]})
                 elif control['type'] == 'pseudo_button':
                     for button_id in control['neither_ids']:
@@ -76,7 +76,7 @@ class Design:
                     for alias in control['aliases']:
                         required_inputs[device_name]['buttons_by_alias'][alias] = control['neither_ids']
                     buttons.append({'input_identities': [{'device': njoy_device_id,
-                                                          'kind': ControlEventKind.BUTTON,
+                                                          'kind': CtrlKind.BUTTON,
                                                           'control': control_id}
                                                          for control_id in control['neither_ids']],
                                     'is_pseudo_button': True})

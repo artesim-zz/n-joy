@@ -4,7 +4,7 @@ import time
 import zmq
 
 from njoy_core.core.core_controls import Axis, Button, Hat, PseudoButton
-from njoy_core.common.messages import HatValue, ControlEvent, ControlEventKind, control_identity
+from njoy_core.common.messages import HatValue, ControlEvent, CtrlKind, control_identity
 
 ZMQ_CONTEXT = zmq.Context()
 
@@ -67,27 +67,27 @@ def main():
                                      endpoint='inproc://output'),
                Axis(context=ZMQ_CONTEXT,
                     inputs='inproc://input',
-                    input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=7)],
+                    input_identities=[control_identity(node=0, device=0, kind=CtrlKind.AXIS, control=7)],
                     outputs='inproc://output',
-                    identity=control_identity(node=0, device=0, kind=ControlEventKind.AXIS, control=0)),
+                    identity=control_identity(node=0, device=0, kind=CtrlKind.AXIS, control=0)),
                Button(context=ZMQ_CONTEXT,
                       inputs='inproc://input',
-                      input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=0)],
+                      input_identities=[control_identity(node=0, device=0, kind=CtrlKind.BUTTON, control=0)],
                       outputs='inproc://output',
-                      identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1)),
+                      identity=control_identity(node=0, device=0, kind=CtrlKind.BUTTON, control=1)),
                Hat(context=ZMQ_CONTEXT,
                    inputs='inproc://input',
-                   input_identities=[control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=9)],
+                   input_identities=[control_identity(node=0, device=0, kind=CtrlKind.HAT, control=9)],
                    outputs='inproc://output',
-                   identity=control_identity(node=0, device=0, kind=ControlEventKind.HAT, control=2)),
+                   identity=control_identity(node=0, device=0, kind=CtrlKind.HAT, control=2)),
                PseudoButton(context=ZMQ_CONTEXT,
                             inputs='inproc://input',
                             input_identities=[
-                                control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=1),
-                                control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=2),
-                                control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3)],
+                                control_identity(node=0, device=0, kind=CtrlKind.BUTTON, control=1),
+                                control_identity(node=0, device=0, kind=CtrlKind.BUTTON, control=2),
+                                control_identity(node=0, device=0, kind=CtrlKind.BUTTON, control=3)],
                             outputs='inproc://output',
-                            identity=control_identity(node=0, device=0, kind=ControlEventKind.BUTTON, control=3))]
+                            identity=control_identity(node=0, device=0, kind=CtrlKind.BUTTON, control=3))]
 
     for t in threads:
         t.start()
