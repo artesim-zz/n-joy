@@ -52,7 +52,9 @@ class CtrlKind(enum.IntFlag):
             return None
 
 
-class CtrlIdentity(collections.namedtuple('CtrlIdentity', ['node', 'device', 'kind', 'control'])):
+class CtrlIdentity(collections.namedtuple('CtrlIdentity',
+                                          ['node', 'device', 'kind', 'control'],
+                                          defaults=[None, None, None, None])):
     __IDENTITY_PACKER = struct.Struct('>H')
     __TO_KIND__ = {0x0080: CtrlKind.AXIS,
                    0x0000: CtrlKind.BUTTON,
