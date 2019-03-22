@@ -4,7 +4,7 @@ import time
 import zmq
 
 from njoy_core.core.actuators import Actuator
-from njoy_core.common.messages import HatValue, ControlEvent, CtrlKind, control_identity
+from njoy_core.common.messages import HatValue, ControlEvent, CtrlKind, CtrlIdentity
 
 
 class MockControl(threading.Thread):
@@ -85,15 +85,15 @@ def main():
 
     axis = MockAxis(context=context,
                     output='inproc://output',
-                    identity=control_identity(node=2, device=2, kind=CtrlKind.AXIS, control=2))
+                    identity=CtrlIdentity(node=2, device=2, kind=CtrlKind.AXIS, control=2))
 
     button = MockButton(context=context,
                         output='inproc://output',
-                        identity=control_identity(node=0, device=0, kind=CtrlKind.BUTTON, control=0))
+                        identity=CtrlIdentity(node=0, device=0, kind=CtrlKind.BUTTON, control=0))
 
     hat = MockHat(context=context,
                   output='inproc://output',
-                  identity=control_identity(node=1, device=1, kind=CtrlKind.HAT, control=1))
+                  identity=CtrlIdentity(node=1, device=1, kind=CtrlKind.HAT, control=1))
 
     output_multiplexer = MockOutputMultiplexer(context=context,
                                                endpoint='inproc://output')

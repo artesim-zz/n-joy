@@ -26,10 +26,11 @@ class MockInputMultiplexer(threading.Thread):
 
         while True:
             msg = ControlEvent.recv(socket)
-            print("InputRouter: /Node{}/{}/{}/{} = {}".format(msg.node,
-                                                              self._registered_devices[msg.node][msg.device],
-                                                              msg.kind.short_str(),
-                                                              msg.control,
+            _id = msg.identity
+            print("InputRouter: /Node{}/{}/{}/{} = {}".format(_id.node,
+                                                              self._registered_devices[_id.node][_id.device],
+                                                              _id.kind.short_str(),
+                                                              _id.control,
                                                               msg.value))
 
     def _handle_requests(self):

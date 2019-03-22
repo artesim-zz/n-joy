@@ -1,3 +1,4 @@
+import collections
 import enum
 import pickle
 import struct
@@ -51,8 +52,51 @@ class CtrlKind(enum.IntFlag):
             return None
 
 
-def control_identity(node, device, kind, control):
-    return ControlEvent(node=node, device=device, kind=kind, control=control).identity
+class CtrlIdentity(collections.namedtuple('CtrlIdentity', ['node', 'device', 'kind', 'control'])):
+    __IDENTITY_PACKER = struct.Struct('>H')
+    __TO_KIND__ = {0x0080: CtrlKind.AXIS,
+                   0x0000: CtrlKind.BUTTON,
+                   0x00C0: CtrlKind.HAT}
+    __CTRL_MASK__ = {0x0080: 0x0007,
+                     0x0000: 0x007F,
+                     0x00C0: 0x0003}
+
+    @property
+    def is_anonymous(self):
+        return all([f is None for f in self])
+
+    @property
+    def is_partial(self):
+        return any([f is None for f in self])
+
+    def packed(self):
+        if self.is_partial:
+            return None
+
+        elif self.kind is CtrlKind.AXIS:
+            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
+                                               (self.device & 0xF) << 8 |
+                                               0x80 |
+                                               (self.control & 0x07))
+        elif self.kind is CtrlKind.BUTTON:
+            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
+                                               (self.device & 0xF) << 8 |
+                                               (self.control & 0x7F))
+        elif self.kind is CtrlKind.HAT:
+            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
+                                               (self.device & 0xF) << 8 |
+                                               0xC0 |
+                                               (self.control & 0x03))
+        else:
+            return None
+
+    @classmethod
+    def unpacked(cls, frame):
+        unpacked = cls.__IDENTITY_PACKER.unpack(frame)
+        return cls((unpacked[0] & 0xF000) >> 12,                           # node
+                   (unpacked[0] & 0x0F00) >> 8,                            # device
+                   cls.__TO_KIND__[unpacked[0] & 0x00C0],                  # kind
+                   unpacked[0] & cls.__CTRL_MASK__[unpacked[0] & 0x00C0])  # control
 
 
 class ControlEvent:
@@ -89,75 +133,31 @@ class ControlEvent:
     => The identity can be coded on 2 bytes
     """
 
-    __IDENTITY_PACKER = struct.Struct('>H')
-
     __BUTTON_VALUE_PACKER__ = struct.Struct('>?')
     __HAT_VALUE_PACKER__ = struct.Struct('>B')
     __AXIS_VALUE_PACKER__ = struct.Struct('>d')
 
     # node, device, ctrl and value are keyword-only arguments (after the *)
-    def __init__(self, *, node=None, device=None, kind=None, control=None, value=None):
-        self.node = node
-        self.device = device
-        self.kind = kind or CtrlKind.from_value(value)
-        self.control = control
+    def __init__(self, *, node=None, device=None, kind=None, control=None, identity=None, value=None):
+        if identity is None:
+            if kind is not None:
+                k = kind
+            elif node is None and device is None and control is None:
+                k = kind
+            else:
+                k = CtrlKind.from_value(value)
+            self.identity = CtrlIdentity(node, device, k, control)
+        else:
+            self.identity = identity
+
         self.value = value
 
-    @property
-    def identity(self):
-        if self.is_event:
-            if self.kind is CtrlKind.AXIS:
-                return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
-                                                   (self.device & 0xF) << 8 |
-                                                   0x80 |
-                                                   (self.control & 0x07))
-            elif self.kind is CtrlKind.BUTTON:
-                return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
-                                                   (self.device & 0xF) << 8 |
-                                                   (self.control & 0x7F))
-            elif self.kind is CtrlKind.HAT:
-                return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
-                                                   (self.device & 0xF) << 8 |
-                                                   0xC0 |
-                                                   (self.control & 0x03))
-            else:
-                return None
-        else:
-            return None
-
-    @property
-    def is_event(self):
-        return not self.is_ready_signal
-
-    @property
-    def is_ready_signal(self):
-        return any([self.node is None,
-                    self.device is None,
-                    self.kind is None,
-                    self.control is None])
-
-    @classmethod
-    def _unpacked_identity(cls, identity):
-        kinds = {0x0080: CtrlKind.AXIS,
-                 0x0000: CtrlKind.BUTTON,
-                 0x00C0: CtrlKind.HAT}
-        control_masks = {0x0080: 0x0007,
-                         0x0000: 0x007F,
-                         0x00C0: 0x0003}
-        unpacked = cls.__IDENTITY_PACKER.unpack(identity)
-        return ((unpacked[0] & 0xF000) >> 12,                       # node
-                (unpacked[0] & 0x0F00) >> 8,                        # device
-                kinds[unpacked[0] & 0x00C0],                        # kind
-                unpacked[0] & control_masks[unpacked[0] & 0x00C0])  # control
-
     def _serialize_identity(self):
-        identity = self.identity
-
-        if identity is None:
+        if self.identity.is_anonymous:
             return []
         else:
             # Adding an empty frame for compatibility with the REQ sockets, when used with a ROUTER socket
-            return [identity, b'']
+            return [self.identity.packed(), b'']
 
     def _serialize_value(self):
         if self.value is None:
@@ -176,8 +176,7 @@ class ControlEvent:
             raise MessageException("Cannot serialize value : {}".format(self.value))
 
     def send(self, socket):
-        frames = self._serialize_identity() + self._serialize_value()
-        socket.send_multipart(frames)
+        socket.send_multipart(self._serialize_identity() + self._serialize_value())
 
     @classmethod
     def _deserialize_value(cls, value_frames):
@@ -202,18 +201,10 @@ class ControlEvent:
     @classmethod
     def _deserialize(cls, frames):
         if len(frames[0]) == 2 and frames[1] == b'':
-            node, device, kind, control = cls._unpacked_identity(frames[0])
-            return {'node': node,
-                    'device': device,
-                    'kind': kind,
-                    'control': control,
+            return {'identity': CtrlIdentity.unpacked(frames[0]),
                     'value': cls._deserialize_value(frames[2:])}
         else:
-            return {'node': None,
-                    'device': None,
-                    'kind': None,
-                    'control': None,
-                    'value': cls._deserialize_value(frames)}
+            return {'value': cls._deserialize_value(frames)}
 
     @classmethod
     def recv(cls, socket):

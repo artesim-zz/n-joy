@@ -13,7 +13,7 @@ class InputBuffer(threading.Thread):
         self._socket = context.socket(zmq.SUB)
         self._socket.connect(inputs)
         for identity in input_identities:
-            self._socket.subscribe(identity)
+            self._socket.subscribe(identity.packed())
 
         self._inputs = dict()
         self._nb_expected_inputs = len(input_identities)

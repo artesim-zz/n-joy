@@ -11,7 +11,7 @@ class Actuator(threading.Thread):
         super().__init__()
         self._ctx = context
         self._socket = self._ctx.socket(zmq.REQ)
-        self._socket.set(zmq.IDENTITY, identity)
+        self._socket.set(zmq.IDENTITY, identity.packed())
         self._socket.connect(outputs)
         self._value = None
         self._output_queue = collections.deque(maxlen=1)

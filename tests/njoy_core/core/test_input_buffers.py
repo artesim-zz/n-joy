@@ -4,7 +4,7 @@ import time
 import zmq
 
 from njoy_core.core.input_buffers import InputBuffer
-from njoy_core.common.messages import ControlEvent, CtrlKind, control_identity
+from njoy_core.common.messages import ControlEvent, CtrlKind, CtrlIdentity
 
 
 class MockInputMultiplexer(threading.Thread):
@@ -64,10 +64,7 @@ def main():
 
     control = MockControl(context=context,
                           input_endpoint='inproc://input',
-                          input_identities=[control_identity(node=0,
-                                                             device=0,
-                                                             kind=CtrlKind.BUTTON,
-                                                             control=i)
+                          input_identities=[CtrlIdentity(node=0, device=0, kind=CtrlKind.BUTTON, control=i)
                                             for i in range(3)])
     multiplexer.start()
     control.start()
