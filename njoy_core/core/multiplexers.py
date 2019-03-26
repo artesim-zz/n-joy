@@ -1,7 +1,7 @@
 import threading
 import zmq
 
-from njoy_core.common.messages import ControlEvent
+from njoy_core.core.messages import ControlEvent
 
 
 class InputMultiplexer(threading.Thread):

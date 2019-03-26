@@ -3,7 +3,7 @@ import sdl2.ext
 import time
 
 from .sdl_joystick import SDLJoystick
-from njoy_core.common.messages import InputNodeRegisterRequest, InputNodeRegisterReply, ControlEvent
+from njoy_core.core.messages import InputNodeRegisterRequest, InputNodeRegisterReply, ControlEvent
 
 
 class HidEventLoopException(Exception):

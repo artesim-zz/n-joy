@@ -1,104 +1,12 @@
-import collections
-import enum
 import pickle
 import struct
 
+from njoy_core.core.model.device import PhysicalDevice, VirtualDevice
+from njoy_core.core.model.control import HatState, Axis, Button, Hat
 
-class MessageException(Exception):
+
+class MessageError(Exception):
     pass
-
-
-@enum.unique
-class HatValue(enum.IntFlag):
-    HAT_CENTER = 0
-    HAT_UP = 1
-    HAT_RIGHT = 2
-    HAT_DOWN = 4
-    HAT_LEFT = 8
-    HAT_UP_RIGHT = HAT_UP | HAT_RIGHT
-    HAT_UP_LEFT = HAT_UP | HAT_LEFT
-    HAT_DOWN_RIGHT = HAT_DOWN | HAT_RIGHT
-    HAT_DOWN_LEFT = HAT_DOWN | HAT_LEFT
-
-    @classmethod
-    def list(cls):
-        return [v for v in cls]
-
-    @classmethod
-    def set(cls):
-        return {v for v in cls}
-
-
-@enum.unique
-class CtrlKind(enum.IntFlag):
-    AXIS = enum.auto()
-    BUTTON = enum.auto()
-    HAT = enum.auto()
-
-    def short_str(self):
-        return {CtrlKind.AXIS: 'axis',
-                CtrlKind.BUTTON: 'button',
-                CtrlKind.HAT: 'hat'}[self.value]
-
-    @staticmethod
-    def from_value(value):
-        if isinstance(value, float):
-            return CtrlKind.AXIS
-        elif isinstance(value, bool):
-            return CtrlKind.BUTTON
-        elif isinstance(value, int) and value in HatValue.set():
-            return CtrlKind.HAT
-        else:
-            return None
-
-
-class CtrlIdentity(collections.namedtuple('CtrlIdentity',
-                                          ['node', 'device', 'kind', 'control'],
-                                          defaults=[None, None, None, None])):
-    __IDENTITY_PACKER = struct.Struct('>H')
-    __TO_KIND__ = {0x0080: CtrlKind.AXIS,
-                   0x0000: CtrlKind.BUTTON,
-                   0x00C0: CtrlKind.HAT}
-    __CTRL_MASK__ = {0x0080: 0x0007,
-                     0x0000: 0x007F,
-                     0x00C0: 0x0003}
-
-    @property
-    def is_anonymous(self):
-        return all([f is None for f in self])
-
-    @property
-    def is_partial(self):
-        return any([f is None for f in self])
-
-    def packed(self):
-        if self.is_partial:
-            return None
-
-        elif self.kind is CtrlKind.AXIS:
-            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
-                                               (self.device & 0xF) << 8 |
-                                               0x80 |
-                                               (self.control & 0x07))
-        elif self.kind is CtrlKind.BUTTON:
-            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
-                                               (self.device & 0xF) << 8 |
-                                               (self.control & 0x7F))
-        elif self.kind is CtrlKind.HAT:
-            return self.__IDENTITY_PACKER.pack((self.node & 0xF) << 12 |
-                                               (self.device & 0xF) << 8 |
-                                               0xC0 |
-                                               (self.control & 0x03))
-        else:
-            return None
-
-    @classmethod
-    def unpacked(cls, frame):
-        unpacked = cls.__IDENTITY_PACKER.unpack(frame)
-        return cls((unpacked[0] & 0xF000) >> 12,                           # node
-                   (unpacked[0] & 0x0F00) >> 8,                            # device
-                   cls.__TO_KIND__[unpacked[0] & 0x00C0],                  # kind
-                   unpacked[0] & cls.__CTRL_MASK__[unpacked[0] & 0x00C0])  # control
 
 
 class ControlEvent:
@@ -121,9 +29,10 @@ class ControlEvent:
     Reasoning for the format of the identity frame :
 
     Max number of nodes : 16 => [0x0 .. 0xF]
-    => We can have at most one node per device, so the max number of nodes is equal to the max number of devices
+    => Arbitrary limit, using what's left of the first byte when the device id has been coded (see below)
+    => Plus, 16 nodes still seems a reasonable limit for now (16x16=256 devices, that's a lot)
 
-    Max number of devices : 16 => [0x0 .. 0xF]
+    Max number of devices per node : 16 => [0x0 .. 0xF]
     => We're bound by the max number of virtual output devices (vjoy API)
 
     Max number of axes per device    :   8 => [0x0  ..  0x7] => MSB kind = 10, control_id on 3 LSB bits
@@ -134,51 +43,90 @@ class ControlEvent:
     Summing up :
     => The identity can be coded on 2 bytes
     """
+    __IDENTITY_PACKER = struct.Struct('>H')
 
     __BUTTON_VALUE_PACKER__ = struct.Struct('>?')
     __HAT_VALUE_PACKER__ = struct.Struct('>B')
     __AXIS_VALUE_PACKER__ = struct.Struct('>d')
 
-    # node, device, ctrl and value are keyword-only arguments (after the *)
-    def __init__(self, *, node=None, device=None, kind=None, control=None, identity=None, value=None):
-        if identity is None:
-            if kind is not None:
-                k = kind
-            elif node is None and device is None and control is None:
-                k = kind
-            else:
-                k = CtrlKind.from_value(value)
-            self.identity = CtrlIdentity(node, device, k, control)
-        else:
-            self.identity = identity
+    __CTRL_CLS__ = {0x0080: Axis,
+                    0x0000: Button,
+                    0x0040: Button,
+                    0x00C0: Hat}
+    __CTRL_ID_MASK__ = {0x0080: 0x0007,
+                        0x0000: 0x007F,
+                        0x00C0: 0x0003}
+    __DEV_CLASS__ = NotImplemented
 
+    def __init__(self, *, control=None, value=None):
+        self.control = control
         self.value = value
 
-    def _serialize_identity(self):
-        if self.identity.is_anonymous:
+    def _serialize_control(self):
+        if self.control is None:
             return []
         else:
+            if not self.control.is_assigned:
+                raise MessageError("Cannot serialize an unassigned control.")
+
+            elif isinstance(self.control, Axis):
+                packed_control = self.__IDENTITY_PACKER.pack((self.control.dev.node.id & 0xF) << 12 |
+                                                             (self.control.dev.id & 0xF) << 8 |
+                                                             0x80 |
+                                                             (self.control.id & 0x07))
+            elif isinstance(self.control, Button):
+                packed_control = self.__IDENTITY_PACKER.pack((self.control.dev.node.id & 0xF) << 12 |
+                                                             (self.control.dev.id & 0xF) << 8 |
+                                                             (self.control.id & 0x7F))
+            elif isinstance(self.control, Hat):
+                packed_control = self.__IDENTITY_PACKER.pack((self.control.dev.node.id & 0xF) << 12 |
+                                                             (self.control.dev.id & 0xF) << 8 |
+                                                             0xC0 |
+                                                             (self.control.id & 0x03))
+            else:
+                raise MessageError("Cannot serialize: invalid control.")
+
             # Adding an empty frame for compatibility with the REQ sockets, when used with a ROUTER socket
-            return [self.identity.packed(), b'']
+            return [packed_control, b'']
 
     def _serialize_value(self):
         if self.value is None:
             return [b'']
 
-        if isinstance(self.value, float):
+        if isinstance(self.control, Axis) or isinstance(self.value, float):
             return [self.__AXIS_VALUE_PACKER__.pack(self.value)]
 
-        elif isinstance(self.value, bool):
+        elif isinstance(self.control, Button) or isinstance(self.value, bool):
             return [self.__BUTTON_VALUE_PACKER__.pack(self.value)]
 
-        elif isinstance(self.value, int) and (0x00 <= self.value <= 0x0F):
+        elif isinstance(self.control, Hat) or (isinstance(self.value, int) and (0x00 <= self.value <= 0x0F)):
             return [self.__HAT_VALUE_PACKER__.pack(self.value | 0x80)]
 
         else:
-            raise MessageException("Cannot serialize value : {}".format(self.value))
+            raise MessageError("Cannot serialize value : {}".format(self.value))
 
     def send(self, socket):
-        socket.send_multipart(self._serialize_identity() + self._serialize_value())
+        socket.send_multipart(self._serialize_control() + self._serialize_value())
+
+    @classmethod
+    def _control_class_from_value(cls, value):
+        if isinstance(value, float):
+            return Axis
+        elif isinstance(value, bool):
+            return Button
+        elif isinstance(value, int) and value in HatState.set():
+            return Hat
+        else:
+            return None
+
+    @classmethod
+    def _deserialize_control(cls, control_frame):
+        unpacked = cls.__IDENTITY_PACKER.unpack(control_frame)
+        dev = cls.__DEV_CLASS__(node=(unpacked[0] & 0xF000) >> 12,
+                                dev=(unpacked[0] & 0x0F00) >> 8)
+        ctrl_class = cls.__CTRL_CLS__[unpacked[0] & 0x00C0]
+        ctrl_id = unpacked[0] & cls.__CTRL_ID_MASK__[unpacked[0] & 0x00C0]
+        return ctrl_class(dev=dev, ctrl=ctrl_id)
 
     @classmethod
     def _deserialize_value(cls, value_frames):
@@ -198,12 +146,12 @@ class ControlEvent:
             return unpacked[0] & 0x0F
 
         else:
-            raise MessageException("Cannot deserialize value frames : {}".format(value_frames))
+            raise MessageError("Cannot deserialize value frames : {}".format(value_frames))
 
     @classmethod
     def _deserialize(cls, frames):
         if len(frames[0]) == 2 and frames[1] == b'':
-            return {'identity': CtrlIdentity.unpacked(frames[0]),
+            return {'control': cls._deserialize_control(frames[0]),
                     'value': cls._deserialize_value(frames[2:])}
         else:
             return {'value': cls._deserialize_value(frames)}
@@ -211,6 +159,14 @@ class ControlEvent:
     @classmethod
     def recv(cls, socket):
         return cls(**cls._deserialize(socket.recv_multipart()))
+
+
+class PhysicalControlEvent(ControlEvent):
+    __DEV_CLASS__ = PhysicalDevice
+
+
+class VirtualControlEvent(ControlEvent):
+    __DEV_CLASS__ = VirtualDevice
 
 
 class CoreRequest:
@@ -225,7 +181,7 @@ class CoreRequest:
             elif isinstance(_p, bytes):
                 return _p
             else:
-                raise MessageException("Invalid command : {}".format(_p))
+                raise MessageError("Invalid command : {}".format(_p))
 
         socket.send_multipart([_encoded_command(self.command)] +
                               [pickle.dumps(frame) for frame in self.payload])

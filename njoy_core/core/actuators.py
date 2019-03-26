@@ -3,7 +3,7 @@ import threading
 import time
 import zmq
 
-from njoy_core.common.messages import ControlEvent
+from njoy_core.core.messages import ControlEvent
 
 
 class Actuator(threading.Thread):
