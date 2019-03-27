@@ -1,8 +1,8 @@
 import pickle
 import struct
 
-from njoy_core.core.model.device import PhysicalDevice, VirtualDevice
-from njoy_core.core.model.control import HatState, Axis, Button, Hat
+from .model.device import PhysicalDevice, VirtualDevice
+from .model.control import HatState, Axis, Button, Hat
 
 
 class MessageError(Exception):

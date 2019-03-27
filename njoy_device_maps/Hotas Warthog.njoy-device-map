@@ -4,6 +4,7 @@ nJoyDeviceMap "Joystick - HOTAS Warthog":
     axis 1           => JOYY, JOY_Y
 
     # Hats
+    hat 0            => H1
     hat 0 up         => H1U,  H1_UP
     hat 0 up-right   => H1UR, H1_UP_RIGHT
     hat 0 right      => H1R,  H1_RIGHT
@@ -21,7 +22,7 @@ nJoyDeviceMap "Joystick - HOTAS Warthog":
     button 4         => S1
     button 5         => TG2
 
-    # Pseudo-hats - At the HID level, each really is a set of buttons, actually, not real "hats"
+    # Pseudo-hats - At the HID level, each really is a set of buttons actually, not real "hats"
     button 6         => H2U, H2_UP
     button 7         => H2R, H2_RIGHT
     button 8         => H2D, H2_DOWN
@@ -47,6 +48,7 @@ nJoyDeviceMap "Throttle - HOTAS Warthog":
     axis 4                => THR_FC
 
     # Hats
+    hat 0                 => CS
     hat 0 up              => CSU,  CS_UP
     hat 0 up-right        => CSUR, CS_UP_RIGHT
     hat 0 right           => CSR,  CS_RIGHT
@@ -59,6 +61,7 @@ nJoyDeviceMap "Throttle - HOTAS Warthog":
     # Buttons
     button 0              => SC
 
+    # Pseudo-hat - At the HID level, it really is a set of buttons actually, not a real "hat"
     button 1              => MSP, MS_PRESSED
     button 2              => MSU, MS_UP
     button 3              => MSR, MS_RIGHT
