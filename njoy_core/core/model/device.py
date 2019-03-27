@@ -1,6 +1,6 @@
 import collections
 
-import njoy_core.core.model.node
+from .node import InputNode, OutputNode
 
 
 class DeviceError(Exception):
@@ -8,7 +8,7 @@ class DeviceError(Exception):
 
 
 class AutoRegisteringDevice(type):
-    __NODE_CLASS__ = njoy_core.core.model.node.OutputNode
+    __NODE_CLASS__ = OutputNode
 
     def __call__(cls, *args, node=None, dev=None, enforce_node=True, **kwargs):
         if isinstance(node, int):
@@ -41,9 +41,9 @@ class AbstractDevice:
     def __init__(self, *, node=None, dev=None):
         self.node = node
         self.id = dev
-        self.axes = list()
-        self.buttons = list()
-        self.hats = list()
+        self.axes = dict()
+        self.buttons = dict()
+        self.hats = dict()
 
     def __repr__(self):
         if self.is_assigned:
@@ -75,14 +75,14 @@ class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
     Traceback (most recent call last):
       ...
     njoy_core.core.model.node.NodeError: No existing OutputNode with id 0
-    >>> device = VirtualDevice(node=njoy_core.core.model.node.InputNode())
+    >>> device = VirtualDevice(node=InputNode())
     Traceback (most recent call last):
       ...
     device.DeviceError: NODE must be either an OutputNode, or the id of one
 
     It is automatically registered to the given node and receives an id from it
 
-    >>> output_node = njoy_core.core.model.node.OutputNode()
+    >>> output_node = OutputNode()
     >>> device = VirtualDevice(node=output_node)
     >>> device
     <VirtualDevice /00/00>
@@ -92,7 +92,7 @@ class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
 
     No more than 16 devices per node are allowed :
 
-    >>> node_2 = njoy_core.core.model.node.OutputNode()
+    >>> node_2 = OutputNode()
     >>> for _ in range(16):
     ...     _ = VirtualDevice(node=node_2)
     >>> device = VirtualDevice(node=node_2)
@@ -115,7 +115,7 @@ class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
 
 
 class AutoRegisteringPhysicalDevice(AutoRegisteringDevice):
-    __NODE_CLASS__ = njoy_core.core.model.node.InputNode
+    __NODE_CLASS__ = InputNode
     __DEVICES__ = dict()
     __NAME_INDEX__ = collections.defaultdict(list)  # Allow for several devices with the same name (but distinct GUID)
     __GUID_INDEX__ = dict()
@@ -308,14 +308,14 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
     Traceback (most recent call last):
       ...
     njoy_core.core.model.node.NodeError: No existing InputNode with id 0
-    >>> device = PhysicalDevice(node=njoy_core.core.model.node.OutputNode())
+    >>> device = PhysicalDevice(node=OutputNode())
     Traceback (most recent call last):
       ...
     device.DeviceError: NODE must be either an InputNode, or the id of one
 
     It is automatically registered to the given node and receives an id from it
 
-    >>> input_node = njoy_core.core.model.node.InputNode()
+    >>> input_node = InputNode()
     >>> device = PhysicalDevice(node=input_node)
     >>> device
     <PhysicalDevice /00/00>
@@ -327,7 +327,7 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
 
     No more than 16 devices per node are allowed :
 
-    >>> node_2 = njoy_core.core.model.node.InputNode()
+    >>> node_2 = InputNode()
     >>> for _ in range(16):
     ...     _ = PhysicalDevice(node=node_2)
     >>> device = PhysicalDevice(node=node_2)
