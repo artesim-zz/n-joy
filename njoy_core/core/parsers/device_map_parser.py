@@ -16,7 +16,8 @@ __PARSER__ = lark.Lark(r"""
     controls: control*
 
     control: "axis"                             id           "=>" aliases -> axis
-           | "hat"                              id direction "=>" aliases -> hat
+           | "hat"                              id           "=>" aliases -> hat
+           | "hat_dir"                          id direction "=>" aliases -> hat_direction
            | "button"                           id           "=>" aliases -> button
            | ("not button" | "neither buttons") neither_ids  "=>" aliases -> pseudo_button
 
@@ -81,9 +82,17 @@ class DeviceMapParser(lark.Transformer):
         }
 
     @lark.v_args(inline=True)
-    def hat(self, _id, direction, aliases):
+    def hat(self, _id, aliases):
         return {
             'type': 'hat',
+            'id': _id,
+            'aliases': aliases
+        }
+
+    @lark.v_args(inline=True)
+    def hat_direction(self, _id, direction, aliases):
+        return {
+            'type': 'hat_direction',
             'id': _id,
             'direction': direction,
             'aliases': aliases
