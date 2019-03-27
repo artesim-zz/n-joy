@@ -1,22 +1,20 @@
-class EssentialToolboxException(Exception):
+class EssentialToolboxError(Exception):
     pass
 
 
 class EssentialToolbox:
     @staticmethod
-    def passthrough(value):
-        return value
+    def passthrough(control):
+        return control.state
 
     @staticmethod
-    def not_(value):
-        if not isinstance(value, bool):
-            raise EssentialToolboxException("The NOT control only accepts a boolean input value")
-        return not value
+    def not_(control):
+        return not control.state
 
     @staticmethod
-    def any(*values):
-        return any(values)
+    def any(*controls):
+        return any([control.state for control in controls])
 
     @staticmethod
-    def not_any(*values):
-        return not any(values)
+    def not_any(*controls):
+        return not any([control.state for control in controls])
