@@ -3,7 +3,9 @@ import sdl2.ext
 import time
 
 from .sdl_joystick import SDLJoystick
-from njoy_core.core.messages import InputNodeRegisterRequest, InputNodeRegisterReply, ControlEvent
+from njoy_core.core.model.device import PhysicalDevice
+from njoy_core.core.model.control import Axis, Button, Hat
+from njoy_core.core.messages import InputNodeRegisterRequest, InputNodeRegisterReply, PhysicalControlEvent
 
 
 class HidEventLoopException(Exception):
@@ -24,8 +26,8 @@ class HidEventLoop:
     def handshake(self, socket):
         SDLJoystick.sdl_init()
 
-        # First send our list of joysticks to njoy_core
-        InputNodeRegisterRequest(devices=SDLJoystick.device_names()).send(socket)
+        # First send our list of joysticks to njoy_core, excluding vJoy devices (those are our output devices)
+        InputNodeRegisterRequest(devices=SDLJoystick.device_list(exclude_list=['vJoy Device'])).send(socket)
         print("Input Node: sent request")
 
         # The nJoy core replies with the list of those it's interested in, if any...
@@ -37,15 +39,10 @@ class HidEventLoop:
             raise HidEventLoopException("The nJoy core isn't interested in any of our devices, exiting.")
 
         devices = dict()
-        for (njoy_device_id, device_name) in reply.device_ids_map.items():
-            sdl_device_id = SDLJoystick.find_device_index(device_name)
-            if sdl_device_id is None:
-                raise HidEventLoopException("Unknown device : {}".format(device_name))
-
-            device = SDLJoystick.open(sdl_device_id)
-            devices[device.instance_id] = {'node_id': reply.node_id,
-                                           'device_id': njoy_device_id,
-                                           'device': device}
+        for (sdl_device_guid, njoy_device_id) in reply.device_ids_map.items():
+            device = SDLJoystick.open(sdl_device_guid)
+            devices[device.instance_id] = {'njoy_device': PhysicalDevice(node=reply.node_id, dev=njoy_device_id),
+                                           'sdl_device': device}
         self._devices = devices
 
     @staticmethod
@@ -63,24 +60,18 @@ class HidEventLoop:
                 raise HidEventLoopQuit()
 
             elif event.type == sdl2.SDL_JOYAXISMOTION:
-                device = self._devices[event.jaxis.which]
-                ControlEvent(node=device['node_id'],
-                             device=device['device_id'],
-                             control=event.jaxis.axis,
-                             value=self._axis(event.jaxis.value)).send(socket)
+                PhysicalControlEvent(control=Axis(dev=self._devices[event.jaxis.which]['njoy_device'],
+                                                  ctrl=event.jaxis.axis),
+                                     value=self._axis(event.jaxis.value)).send(socket)
 
             elif event.type in {sdl2.SDL_JOYBUTTONDOWN, sdl2.SDL_JOYBUTTONUP}:
-                device = self._devices[event.jbutton.which]
-                ControlEvent(node=device['node_id'],
-                             device=device['device_id'],
-                             control=event.jbutton.button,
-                             value=self._button(event.jbutton.state)).send(socket)
+                PhysicalControlEvent(control=Button(dev=self._devices[event.jbutton.which]['njoy_device'],
+                                                    ctrl=event.jbutton.button),
+                                     value=self._button(event.jbutton.state)).send(socket)
 
             elif event.type == sdl2.SDL_JOYHATMOTION:
-                device = self._devices[event.jhat.which]
-                ControlEvent(node=device['node_id'],
-                             device=device['device_id'],
-                             control=event.jhat.hat,
-                             value=event.jhat.value).send(socket)
+                PhysicalControlEvent(control=Hat(dev=self._devices[event.jhat.which]['njoy_device'],
+                                                 ctrl=event.jhat.hat),
+                                     value=event.jhat.value).send(socket)
 
         time.sleep(self.__LOOP_SLEEP_TIME__)

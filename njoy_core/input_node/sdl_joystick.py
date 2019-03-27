@@ -50,30 +50,36 @@ class SDLJoystick:
         name = sdl2.SDL_JoystickNameForIndex(device_index)
         if not name:
             raise SdlJoystickException(sdl2.SDL_GetError())
-        return name.decode('utf-8')
+        return name
 
     @staticmethod
-    def device_names():
-        return [sdl2.SDL_JoystickNameForIndex(i).decode('utf-8') for i in range(SDLJoystick.nb_joysticks())]
+    def device_list(exclude_list=None):
+        if exclude_list is not None:
+            excluded = {name.encode('utf-8') for name in exclude_list}
+        else:
+            excluded = set()
+
+        return [(bytes(guid.data), name)
+                for guid, name in [(SDLJoystick.device_guid(i), SDLJoystick.device_name(i))
+                                   for i in range(SDLJoystick.nb_joysticks())]
+                if name not in excluded]
 
     @staticmethod
-    def find_device_index(device_name):
-        for i in range(SDLJoystick.nb_joysticks()):
-            if device_name == SDLJoystick.device_name(i):
-                return i
-
-    @staticmethod
-    def to_guid_str(guid):
-        return ['{:02x}'.format(guid.data[i]) for i in range(guid.data)]
+    def to_guid_hex_str(guid):
+        return ''.join(['{:02X}'.format(b) for b in guid])
 
     @classmethod
-    def open(cls, device_name_or_index):
-        sdl_joystick = sdl2.SDL_JoystickOpen(device_name_or_index
-                                             if isinstance(device_name_or_index, int)
-                                             else SDLJoystick.find_device_index(device_name_or_index))
+    def open(cls, device_guid):
+        def _find_device(_guid):
+            for i in range(SDLJoystick.nb_joysticks()):
+                if _guid == bytes(SDLJoystick.device_guid(i).data):
+                    return i
+            raise SdlJoystickException("Couldn't find any device with GUID {}".format(_guid))
+
+        sdl_joystick = sdl2.SDL_JoystickOpen(_find_device(device_guid))
         if not sdl_joystick:
             raise SdlJoystickException(sdl2.SDL_GetError())
-        return cls(sdl_joystick, device_name_or_index)
+        return cls(sdl_joystick)
 
     def close(self):
         sdl2.SDL_JoystickClose(self._sdl_joystick)
@@ -82,8 +88,7 @@ class SDLJoystick:
     def is_attached(self):
         return sdl2.SDL_JoystickGetAttached(self._sdl_joystick) if self._sdl_joystick else False
 
-    def __init__(self, sdl_joystick, device_index):
-        self._device_index = device_index
+    def __init__(self, sdl_joystick):
         self._sdl_joystick = sdl_joystick
 
     def __repr__(self):
@@ -128,10 +133,6 @@ class SDLJoystick:
         return guid
 
     @property
-    def guid_str(self):
-        return self.to_guid_str(self.guid)
-
-    @property
     def instance_id(self):
         instance_id = sdl2.SDL_JoystickInstanceID(self._sdl_joystick)
         if instance_id < 0:
@@ -139,15 +140,11 @@ class SDLJoystick:
         return instance_id
 
     @property
-    def device_index(self):
-        return self._device_index
-
-    @property
     def name(self):
         name = sdl2.SDL_JoystickName(self._sdl_joystick)
         if not name:
             raise SdlJoystickException(sdl2.SDL_GetError())
-        return name.decode('utf-8')
+        return name
 
     @property
     def nb_axes(self):
