@@ -105,6 +105,12 @@ class AbstractControl(metaclass=AutoRegisteringControl):
         else:
             return '<Unassigned {}>'.format(self.__class__.__name__)
 
+    def __hash__(self):
+        if self.is_assigned:
+            return hash((self.__class__.__name__, self.dev.node.id, self.dev.id, self.id))
+        else:
+            return NotImplemented
+
     @property
     def is_assigned(self):
         return self.dev is not None and self.dev.is_assigned and self.id is not None

@@ -63,54 +63,12 @@ class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
 
     The node is required and must be an existing instance of OutputNode.
 
-    >>> device = VirtualDevice()
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: NODE must be either an OutputNode, or the id of one
-    >>> device = VirtualDevice(node='xxx')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: NODE must be either an OutputNode, or the id of one
-    >>> device = VirtualDevice(node=0)
-    Traceback (most recent call last):
-      ...
-    njoy_core.core.model.node.NodeError: No existing OutputNode with id 0
-    >>> device = VirtualDevice(node=InputNode())
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: NODE must be either an OutputNode, or the id of one
-
     It is automatically registered to the given node and receives an id from it
-
-    >>> output_node = OutputNode()
-    >>> device = VirtualDevice(node=output_node)
-    >>> device
-    <VirtualDevice /00/00>
-    >>> device = VirtualDevice(node=0)
-    >>> device
-    <VirtualDevice /00/01>
 
     No more than 16 devices per node are allowed :
 
-    >>> node_2 = OutputNode()
-    >>> for _ in range(16):
-    ...     _ = VirtualDevice(node=node_2)
-    >>> device = VirtualDevice(node=node_2)
-    Traceback (most recent call last):
-      ...
-    njoy_core.core.model.node.NodeError: Reached max number of devices in <OutputNode 01> (max 16)
-    >>> device = VirtualDevice(node=0)
-    >>> device
-    <VirtualDevice /00/02>
-
     Later on at run time, we'll receive messages referencing a node_id/device_id, and we'll use that to find the
     right instance.
-
-    >>> device2 = VirtualDevice(node=0, dev=2)
-    >>> device2
-    <VirtualDevice /00/02>
-    >>> device2 is device
-    True
     """
 
 
@@ -206,148 +164,15 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
 
     Finally at run time, we'll receive messages referencing a node/device and we'll use that to find the right instance.
 
-    -- Design-parsing phase : init --
-
-    >>> device = PhysicalDevice(alias='a')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: No existing device with alias a
-    >>> device = PhysicalDevice(name='n')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: No existing device with name n
-    >>> device = PhysicalDevice(guid='g')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: No existing device with GUID g
-    >>> device = PhysicalDevice(name='n', guid='g')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: No existing device with GUID g
-    >>> device_1 = PhysicalDevice(alias='a', name='n')
-    >>> device_1.alias
-    'a'
-    >>> device_1.name
-    'n'
-    >>> device_2 = PhysicalDevice(alias='a2', guid='g2')
-    >>> device_2.alias
-    'a2'
-    >>> device_2.guid
-    'g2'
-    >>> device_3 = PhysicalDevice(alias='a3', name='n3', guid='g3')
-    >>> device_3.alias
-    'a3'
-    >>> device_3.name
-    'n3'
-    >>> device_3.guid
-    'g3'
-    >>> device = PhysicalDevice(alias='a', name='xxx')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: Cannot change the name of an existing device, only add it.
-    >>> device = PhysicalDevice(alias='a', guid='g')
-    >>> device.alias
-    'a'
-    >>> device.guid
-    'g'
-    >>> device is device_1
-    True
-    >>> device = PhysicalDevice(alias='a2', guid='xxx')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: Cannot change the GUID of an existing device, only add it.
-    >>> device = PhysicalDevice(alias='a2', name='n2')
-    >>> device.alias
-    'a2'
-    >>> device.name
-    'n2'
-    >>> device is device_2
-    True
-    >>> device_4 = PhysicalDevice(alias='a4', name='a4', guid='g3')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: Already have a device with GUID g3
-    >>> device_4 = PhysicalDevice(alias='a4', name='n3')
-    >>> device_4.name
-    'n3'
-    >>> device_4 = PhysicalDevice(alias='a4', guid='g3')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: Already have a device with GUID g3
-    >>> device_4 = PhysicalDevice(alias='a4', guid='g4')
-    >>> device_4.guid
-    'g4'
-    >>> device_4 = PhysicalDevice(name='n3')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: Ambiguous lookup : several devices with name n3
-    >>> device = PhysicalDevice(name='n3', guid='g3')
-    >>> device is device_3
-    True
-    >>> device = PhysicalDevice(name='n3', guid='g4')
-    >>> device is device_4
-    True
-    >>> device.is_assigned
-    False
-    >>> device
-    <Unassigned PhysicalDevice>
-
-    -- Run time phase --
-
     When no alias, name or GUID is provided, a node is required and must be an existing instance of InputNode :
-
-    >>> device = PhysicalDevice()
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: NODE must be either an InputNode, or the id of one
-    >>> device = PhysicalDevice(node='xxx')
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: NODE must be either an InputNode, or the id of one
-    >>> device = PhysicalDevice(node=0)
-    Traceback (most recent call last):
-      ...
-    njoy_core.core.model.node.NodeError: No existing InputNode with id 0
-    >>> device = PhysicalDevice(node=OutputNode())
-    Traceback (most recent call last):
-      ...
-    device.DeviceError: NODE must be either an InputNode, or the id of one
 
     It is automatically registered to the given node and receives an id from it
 
-    >>> input_node = InputNode()
-    >>> device = PhysicalDevice(node=input_node)
-    >>> device
-    <PhysicalDevice /00/00>
-    >>> device.is_assigned
-    True
-    >>> device = PhysicalDevice(node=0)
-    >>> device
-    <PhysicalDevice /00/01>
-
     No more than 16 devices per node are allowed :
-
-    >>> node_2 = InputNode()
-    >>> for _ in range(16):
-    ...     _ = PhysicalDevice(node=node_2)
-    >>> device = PhysicalDevice(node=node_2)
-    Traceback (most recent call last):
-      ...
-    njoy_core.core.model.node.NodeError: Reached max number of devices in <InputNode 01> (max 16)
-    >>> device = PhysicalDevice(node=0)
-    >>> device
-    <PhysicalDevice /00/02>
 
     Later on at run time, we'll receive messages referencing a node_id/device_id, and we'll use that to find the
     right instance.
-
-    >>> device2 = PhysicalDevice(node=0, dev=2)
-    >>> device2
-    <PhysicalDevice /00/02>
-    >>> device2 is device
-    True
     """
-
     def __init__(self, *, node=None, dev=None, alias=None, name=None, guid=None):
         super().__init__(node=node, dev=dev)
         self.alias = alias

@@ -1,3 +1,16 @@
+"""AbstractNode should not be instantiated directly, use InputNode or OutputNode instead.
+
+Represents a registered input or output node.
+
+Automatically assigns itself an id, to be given back to the node during the Handshake phase.
+
+Ensures no more than the maximum number of active InputNode is registered.
+
+The limit is per-subclass, so even if we reached the max number of InputNode here, we can still add an OutputNode.
+
+Later on at run time, we'll receive messages referencing a node id, and we'll use that to find the instance.
+
+"""
 import abc
 import collections
 
@@ -25,41 +38,6 @@ class AutoIndexingNode(abc.ABCMeta):
 
 
 class AbstractNode(collections.MutableSequence, metaclass=AutoIndexingNode):
-    """Should not be instantiated directly, use InputNode or OutputNode instead.
-
-    Represents a registered input or output node.
-    Automatically assigns itself an id, to be given back to the node during the Handshake phase.
-
-    >>> a = InputNode()
-    >>> a.id
-    0
-    >>> b = InputNode()
-    >>> b.id
-    1
-
-    Ensures no more than the maximum number of active InputNode is registered.
-
-    >>> for _ in range(14):
-    ...     _ = InputNode()
-    >>> x = InputNode()
-    Traceback (most recent call last):
-       ...
-    node.NodeError: Reached maximum number of InputNode (max 16)
-
-    The limit is per-subclass, so even if we reached the max number of InputNode here, we can still add an OutputNode :
-
-    >>> output_node = OutputNode()
-    >>> output_node.id
-    0
-
-    Later on at run time, we'll receive messages referencing a node id, and we'll use that to find the instance.
-
-    >>> msg_node = InputNode(node_id=1)
-    >>> msg_node.id
-    1
-    >>> msg_node is b
-    True
-    """
     __MAX_DEVICES__ = 16
 
     def __init__(self, *, node_id=None):
