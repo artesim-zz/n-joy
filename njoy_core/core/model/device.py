@@ -53,6 +53,9 @@ class AbstractDevice:
         else:
             return '<Unassigned {}>'.format(self.__class__.__name__)
 
+    def __hash__(self):
+        return hash((self.node.id if self.node is not None else None, self.id))
+
     @property
     def is_assigned(self):
         return self.node is not None and self.id is not None
@@ -70,6 +73,20 @@ class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
     Later on at run time, we'll receive messages referencing a node_id/device_id, and we'll use that to find the
     right instance.
     """
+    def register_axis(self, axis):
+        setattr(axis, 'dev', self)
+        setattr(axis, 'id', len(self.axes))
+        self.axes[axis.id] = axis
+
+    def register_button(self, button):
+        setattr(button, 'dev', self)
+        setattr(button, 'id', len(self.buttons))
+        self.buttons[button.id] = button
+
+    def register_hat(self, hat):
+        setattr(hat, 'dev', self)
+        setattr(hat, 'id', len(self.hats))
+        self.hats[hat.id] = hat
 
 
 class AutoRegisteringPhysicalDevice(AutoRegisteringDevice):
@@ -178,3 +195,22 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
         self.alias = alias
         self.name = name
         self.guid = guid
+
+    def __hash__(self):
+        return hash((self.node.id if self.node is not None else None,
+                     self.id,
+                     self.alias,
+                     self.name,
+                     self.guid))
+
+    @classmethod
+    def find(cls, *, guid, name):
+        try:
+            device = PhysicalDevice(guid=guid, name=name)
+            if device.guid is None and guid is not None:
+                device = PhysicalDevice(alias=device.alias, guid=guid)
+            if device.name is None and name is not None:
+                device = PhysicalDevice(alias=device.alias, name=name)
+            return device
+        except DeviceError:
+            return None

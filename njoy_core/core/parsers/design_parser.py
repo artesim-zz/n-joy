@@ -1,8 +1,7 @@
 import lark
 import os
 
-from njoy_core.core.model.device import PhysicalDevice
-from njoy_core.core.model.control import Axis, Button, Hat
+from njoy_core.core.model import PhysicalDevice, Axis, Button, Hat
 from njoy_core.core.toolbox.essential_toolbox import EssentialToolbox
 
 
@@ -45,7 +44,7 @@ __PARSER__ = lark.Lark(r"""
 """, parser='lalr')
 
 
-def parse_design(design_file):
+def parse_design(design_file=None):
     # XXX: stubbed: do as if we parsed the model file, we should get a tree like this one
     input_devices = [
         PhysicalDevice(alias='thr',

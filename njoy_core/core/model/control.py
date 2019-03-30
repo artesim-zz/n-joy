@@ -106,14 +106,40 @@ class AbstractControl(metaclass=AutoRegisteringControl):
             return '<Unassigned {}>'.format(self.__class__.__name__)
 
     def __hash__(self):
-        if self.is_assigned:
-            return hash((self.__class__.__name__, self.dev.node.id, self.dev.id, self.id))
+        if self.dev is None:
+            return hash((self.__class__.__name__,
+                         hash(self._inputs),
+                         id(self._processor),
+                         self.id))
+        elif self.dev.node is None:
+            return hash((self.__class__.__name__,
+                         hash(self._inputs),
+                         id(self._processor),
+                         self.dev.id,
+                         self.id))
         else:
-            return NotImplemented
+            return hash((self.__class__.__name__,
+                         self.dev.node.id,
+                         self.dev.id,
+                         self.id))
 
     @property
     def is_assigned(self):
         return self.dev is not None and self.dev.is_assigned and self.id is not None
+
+    @property
+    def is_physical_control(self):
+        return self.dev is not None and isinstance(self.dev, PhysicalDevice)
+
+    @property
+    def physical_inputs(self):
+        inputs = set()
+        for control in self._inputs:
+            if control.is_physical_control:
+                inputs.add(control)
+            else:
+                inputs.update(control.physical_inputs)
+        return inputs
 
     @property
     def state(self):
