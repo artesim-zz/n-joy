@@ -1,9 +1,8 @@
 import multiprocessing
-import pickle
 import threading
 import zmq
 
-from njoy_core.common.messages import Request, Reply
+from njoy_core.core.messages import OutputNodeCapabilities, OutputNodeAssignments
 from .virtual_joystick import VirtualJoystick
 
 
@@ -20,26 +19,18 @@ class StandaloneOutputNode:
     def _request_assignments(self):
         socket = self._ctx.socket(zmq.REQ)
         socket.connect(self._requests_endpoint)
-
-        msg_parts = [pickle.dumps(dc) for dc in VirtualJoystick.device_capabilities()]
-        Request('register', *msg_parts).send(socket)
-
-        assignments = Reply.recv(socket)
-        if assignments.command == 'not_enough_controls':
-            raise OutputNodeException("Not enough controls available on all the Virtual Devices")
-
-        elif assignments.command == 'assignments':
-            return [pickle.loads(assignment) for assignment in assignments.args]
-
-        else:
-            raise OutputNodeException("Unexpected answer : {}".format(assignments.command))
+        OutputNodeCapabilities(capabilities=VirtualJoystick.device_capabilities()).send(socket)
+        reply = OutputNodeAssignments.recv(socket)
+        return reply.node
 
     def run(self):
-        virtual_joysticks = [VirtualJoystick(device_id=assignment['device_id'],
-                                             controls=assignment['controls'],
+        virtual_joysticks = [VirtualJoystick(device=device,
                                              context=self._ctx,
                                              events_endpoint=self._events_endpoint)
-                             for assignment in self._request_assignments()]
+                             for device in self._request_assignments()]
+
+        for vj in virtual_joysticks:
+            vj.start()
 
         for vj in virtual_joysticks:
             vj.join()

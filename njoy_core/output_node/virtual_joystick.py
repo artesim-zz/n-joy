@@ -1,77 +1,62 @@
-import gevent
-import gevent.pool
 import threading
+import zmq
 
-from zmq import green as zmq
-
-from njoy_core.common.messages import MessageType, HatValue, Message, AxisEvent, ButtonEvent, HatEvent
+from njoy_core.core.messages import VirtualControlEvent
+from njoy_core.core.model import HatState
 from njoy_core.output_node import vjoy_device
 
 
-class Feeder(gevent.greenlet):
-    def __init__(self, virtual_joystick, ctrl_id):
+class Feeder(threading.Thread):
+    def __init__(self, virtual_joystick, control):
         super().__init__()
-        self._device_id = virtual_joystick.device_id
-        self._ctrl_id = ctrl_id
-        self._output_device = virtual_joystick.output_device
-        self._ctx = virtual_joystick.ctx
-        self._events_endpoint = virtual_joystick.events_endpoint
 
-    def _subscribe(self, socket):
-        raise NotImplementedError
+        self._ctx = virtual_joystick.ctx
+        self._socket = self._ctx.socket(zmq.REQ)
+        self._socket.set(zmq.IDENTITY, VirtualControlEvent.mk_identity(control))
+        self._socket.connect(virtual_joystick.events_endpoint)
+
+        self._output_device = virtual_joystick.output_device
+        self._control = control
 
     def _handle_event(self, event):
         raise NotImplementedError
 
-    def run(self):
-        socket = self._ctx.socket(zmq.SUB)
-        socket.connect(self._events_endpoint)
-        self._subscribe(socket)
+    def loop(self, socket):
+        VirtualControlEvent().send(socket)
+        event = VirtualControlEvent.recv(socket)
+        self._handle_event(event)
 
+    def run(self):
         while True:
-            msg = Message.recv(socket)
-            self._handle_event(msg)
+            self.loop(self._socket)
 
 
 class AxisFeeder(Feeder):
-    @staticmethod
-    def _to_float_axis(_axis_value):
-        return _axis_value / 32768 if _axis_value < 0 else _axis_value / 32767
-
-    def _subscribe(self, socket):
-        socket.setsockopt(zmq.SUBSCRIBE, AxisEvent(self._device_id, self._ctrl_id).header_parts)
-
     def _handle_event(self, event):
-        self._output_device.set_axis(axis_id=self._ctrl_id,
-                                     axis_value=self._to_float_axis(event.value))
+        self._output_device.set_axis(axis_id=self._control.id,
+                                     axis_value=event.value)
 
 
 class ButtonFeeder(Feeder):
-    def _subscribe(self, socket):
-        socket.setsockopt(zmq.SUBSCRIBE, ButtonEvent(self._device_id, self._ctrl_id).header_parts)
-
     def _handle_event(self, event):
-        self._output_device.set_button(button_id=self._ctrl_id,
+        self._output_device.set_button(button_id=self._control.id,
                                        state=event.state)
 
 
 class HatFeeder(Feeder):
     # -1 for none (not pressed), or in range [0 .. 35900] (tenth of degrees)
-    __to_continuous_pov = {HatValue.HAT_UP: 0,
-                           HatValue.HAT_UP_RIGHT: 4500,
-                           HatValue.HAT_RIGHT: 9000,
-                           HatValue.HAT_DOWN_RIGHT: 13500,
-                           HatValue.HAT_DOWN: 18000,
-                           HatValue.HAT_DOWN_LEFT: 22500,
-                           HatValue.HAT_LEFT: 27000,
-                           HatValue.HAT_UP_LEFT: 31500,
-                           HatValue.HAT_CENTER: -1}
-
-    def _subscribe(self, socket):
-        socket.setsockopt(zmq.SUBSCRIBE, HatEvent(self._device_id, self._ctrl_id).header_parts)
+    __to_continuous_pov = {HatState.HAT_UP: 0,
+                           HatState.HAT_UP_RIGHT: 4500,
+                           HatState.HAT_RIGHT: 9000,
+                           HatState.HAT_DOWN_RIGHT: 13500,
+                           HatState.HAT_DOWN: 18000,
+                           HatState.HAT_DOWN_LEFT: 22500,
+                           HatState.HAT_LEFT: 27000,
+                           HatState.HAT_UP_LEFT: 31500,
+                           HatState.HAT_CENTER: -1}
 
     def _handle_event(self, event):
-        self._output_device.set_axis(pov_id=self._ctrl_id,
+        self._output_device.set_axis(pov_id=self._control.id,
                                      pov_value=self.__to_continuous_pov[event.value])
 
 
@@ -95,13 +80,13 @@ class VirtualJoystick(threading.Thread):
                     'max_nb_buttons': cls.__MAX_NB_BUTTONS__,
                     'max_nb_hats': cls.__MAX_NB_HATS__}
 
-    def __init__(self, device_id, controls, context, events_endpoint):
-        super().__init__(name="/virtual_joysticks/{}".format(device_id))
+    def __init__(self, device, context, events_endpoint):
+        super().__init__(name="/virtual_joysticks/{}".format(device.id))
         self._ctx = context
         self._events_endpoint = events_endpoint
-        self._device_id = device_id
-        self._output_device = vjoy_device.VJoyDevice(device_id=device_id)
-        self._controls = [self._make_feeder(c) for c in controls]
+        self._device = device
+        self._output_device = vjoy_device.VJoyDevice(device_id=device.id)
+        self._feeders = self._make_feeders()
 
     @property
     def ctx(self):
@@ -112,24 +97,17 @@ class VirtualJoystick(threading.Thread):
         return self._events_endpoint
 
     @property
-    def device_id(self):
-        return self._device_id
-
-    @property
     def output_device(self):
         return self._output_device
 
-    def _make_feeder(self, feeder_def):
-        feeder_class = {MessageType.AXIS_EVENT: AxisFeeder,
-                        MessageType.BUTTON_EVENT: ButtonFeeder,
-                        MessageType.HAT_EVENT: HatFeeder}
-        try:
-            return feeder_class[feeder_def['ctrl_type']](virtual_joystick=self, ctrl_id=feeder_def['ctrl_id'])
-        except KeyError as e:
-            raise Exception("Unknown control type : {}".format(e))
+    def _make_feeders(self):
+        feeders = [AxisFeeder(virtual_joystick=self, control=axis) for axis in self._device.axes.values()]
+        feeders += [ButtonFeeder(virtual_joystick=self, control=button) for button in self._device.buttons.values()]
+        feeders += [HatFeeder(virtual_joystick=self, control=hat) for hat in self._device.hats.values()]
+        return feeders
 
     def run(self):
-        group = gevent.pool.Group()
-        for control in self._controls:
-            group.start(control)
-        group.join()
+        for feeder in self._feeders:
+            feeder.start()
+        for feeder in self._feeders:
+            feeder.join()

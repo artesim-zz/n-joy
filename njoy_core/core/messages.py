@@ -1,8 +1,8 @@
 import pickle
 import struct
 
-from .model.device import PhysicalDevice, VirtualDevice
-from .model.control import HatState, Axis, Button, Hat
+from .model import PhysicalDevice, VirtualDevice
+from .model import HatState, Axis, Button, Hat
 
 
 class MessageError(Exception):
@@ -62,32 +62,34 @@ class ControlEvent:
         self.control = control
         self.value = value
 
+    @classmethod
+    def mk_identity(cls, control):
+        if not control.is_assigned:
+            raise MessageError("Cannot make a socket identity out of unassigned controls.")
+
+        elif isinstance(control, Axis):
+            return cls.__IDENTITY_PACKER.pack((control.dev.node.id & 0xF) << 12 |
+                                              (control.dev.id & 0xF) << 8 |
+                                              0x80 |
+                                              (control.id & 0x07))
+        elif isinstance(control, Button):
+            return cls.__IDENTITY_PACKER.pack((control.dev.node.id & 0xF) << 12 |
+                                              (control.dev.id & 0xF) << 8 |
+                                              (control.id & 0x7F))
+        elif isinstance(control, Hat):
+            return cls.__IDENTITY_PACKER.pack((control.dev.node.id & 0xF) << 12 |
+                                              (control.dev.id & 0xF) << 8 |
+                                              0xC0 |
+                                              (control.id & 0x03))
+        else:
+            raise MessageError("Invalid control class.")
+
     def _serialize_control(self):
         if self.control is None:
             return []
         else:
-            if not self.control.is_assigned:
-                raise MessageError("Cannot serialize an unassigned control.")
-
-            elif isinstance(self.control, Axis):
-                packed_control = self.__IDENTITY_PACKER.pack((self.control.dev.node.id & 0xF) << 12 |
-                                                             (self.control.dev.id & 0xF) << 8 |
-                                                             0x80 |
-                                                             (self.control.id & 0x07))
-            elif isinstance(self.control, Button):
-                packed_control = self.__IDENTITY_PACKER.pack((self.control.dev.node.id & 0xF) << 12 |
-                                                             (self.control.dev.id & 0xF) << 8 |
-                                                             (self.control.id & 0x7F))
-            elif isinstance(self.control, Hat):
-                packed_control = self.__IDENTITY_PACKER.pack((self.control.dev.node.id & 0xF) << 12 |
-                                                             (self.control.dev.id & 0xF) << 8 |
-                                                             0xC0 |
-                                                             (self.control.id & 0x03))
-            else:
-                raise MessageError("Cannot serialize: invalid control.")
-
             # Adding an empty frame for compatibility with the REQ sockets, when used with a ROUTER socket
-            return [packed_control, b'']
+            return [self.mk_identity(self.control), b'']
 
     def _serialize_value(self):
         if self.value is None:
@@ -192,41 +194,35 @@ class CoreRequest:
         command = frames[0].decode('utf-8')
         payload = [pickle.loads(frame) for frame in frames[1:]]
         if command == 'register':
-            return InputNodeRegisterRequest(devices=payload)
+            return InputNodeRegisterRequest(available_devices=payload)
         elif command == 'registered':
-            return InputNodeRegisterReply(node_id=payload[0],
-                                          device_ids_map=payload[1])
+            return InputNodeRegisterReply(node=payload[0])
         elif command == 'capabilities':
             return OutputNodeCapabilities(capabilities=payload)
         elif command == 'assignments':
-            return OutputNodeAssignments(node_id=payload[0],
-                                         assignments=payload[1])
+            return OutputNodeAssignments(node=payload[0])
         else:
             return cls(command=command, payload=payload)
 
 
 class InputNodeRegisterRequest(CoreRequest):
-    def __init__(self, *, devices):
+    def __init__(self, *, available_devices):
         super().__init__(command='register',
-                         payload=devices)
+                         payload=available_devices)
 
     @property
-    def devices(self):
+    def available_devices(self):
         return self.payload
 
 
 class InputNodeRegisterReply(CoreRequest):
-    def __init__(self, *, node_id, device_ids_map):
+    def __init__(self, *, node):
         super().__init__(command='registered',
-                         payload=[node_id, device_ids_map])
+                         payload=[node])
 
     @property
-    def node_id(self):
+    def node(self):
         return self.payload[0]
-
-    @property
-    def device_ids_map(self):
-        return self.payload[1]
 
 
 class OutputNodeCapabilities(CoreRequest):
@@ -240,14 +236,10 @@ class OutputNodeCapabilities(CoreRequest):
 
 
 class OutputNodeAssignments(CoreRequest):
-    def __init__(self, *, node_id, assignments):
+    def __init__(self, *, node):
         super().__init__(command='assignments',
-                         payload=[node_id, assignments])
+                         payload=[node])
 
     @property
-    def node_id(self):
+    def node(self):
         return self.payload[0]
-
-    @property
-    def assignments(self):
-        return self.payload[1]
