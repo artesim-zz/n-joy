@@ -1,43 +1,24 @@
 import json
-import sdl2
 
-
-def guid_as_string(guid):
-    size = len(guid.data)
-    str_bytes = ['{:02x}'.format(guid.data[i]) for i in range(size)]
-    return '-'.join([''.join(str_bytes[g*4:g*4+4])
-                     for g in range(size // 4)])
+from njoy_core.input_node.sdl_joystick import SDLJoystick
 
 
 def main():
-    sdl2.SDL_Init(sdl2.SDL_INIT_JOYSTICK)
+    SDLJoystick.sdl_init()
 
-    nb_joysticks = sdl2.SDL_NumJoysticks()
-    if nb_joysticks < 0:
-        raise Exception(sdl2.SDL_GetError())
+    devices = []
+    for guid, name in SDLJoystick.device_list(exclude_list=['vJoy Device']):
+        device = SDLJoystick.open(guid)
+        devices.append({
+            'GUID': SDLJoystick.to_guid_hex_str(guid),
+            'Name': name.decode('utf-8'),
+            'Nb_Axes': device.nb_axes,
+            'Nb_Buttons': device.nb_buttons,
+            'Nb_Balls': device.nb_balls,
+            'Nb_Hats': device.nb_hats
+        })
 
-    joystick_infos = []
-    for i in range(nb_joysticks):
-        ji = {
-            'GUID': guid_as_string(sdl2.SDL_JoystickGetDeviceGUID(i))
-        }
-
-        joystick = sdl2.SDL_JoystickOpen(i)
-        if not joystick:
-            raise Exception(sdl2.SDL_GetError())
-
-        ji['Name'] = sdl2.SDL_JoystickName(joystick).decode('utf-8')
-        ji['Nb_Axes'] = sdl2.SDL_JoystickNumAxes(joystick)
-        ji['Nb_Buttons'] = sdl2.SDL_JoystickNumButtons(joystick)
-        ji['Nb_Hats'] = sdl2.SDL_JoystickNumHats(joystick)
-        ji['Nb_Balls'] = sdl2.SDL_JoystickNumBalls(joystick)
-
-        sdl2.SDL_JoystickClose(joystick)
-        joystick_infos.append(ji)
-
-    sdl2.SDL_Quit()
-
-    print(json.dumps(joystick_infos, indent=True, sort_keys=True))
+    print(json.dumps(devices, indent=True, sort_keys=True))
 
 
 if __name__ == '__main__':
