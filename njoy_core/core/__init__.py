@@ -1,10 +1,13 @@
 import threading
 import zmq
 
-from njoy_core.common import messages
-from njoy_core.parsers.design import Design
+import njoy_core.core.parsers.design_parser
+from .actuators import Actuator
+from .messages import CoreRequest
+from .messages import InputNodeRegisterRequest, InputNodeRegisterReply
+from .messages import OutputNodeCapabilities, OutputNodeAssignments
+from .model import InputNode, OutputNode, PhysicalDevice, VirtualDevice, Axis, Button, Hat
 from .multiplexers import InputMultiplexer, OutputMultiplexer
-from .actuators import AxisActuator, ButtonActuator, HatActuator
 
 
 class CoreException(Exception):
@@ -12,6 +15,9 @@ class CoreException(Exception):
 
 
 class Core(threading.Thread):
+    __INTERNAL_MUX_IN__ = 'inproc://core/internal/mux_in'
+    __INTERNAL_MUX_OUT__ = 'inproc://core/internal/mux_out'
+
     def __init__(self, *, context, input_events, output_events, requests):
         super().__init__()
 
@@ -19,89 +25,89 @@ class Core(threading.Thread):
 
         self._mux_in = InputMultiplexer(context=self._ctx,
                                         frontend=input_events,
-                                        backend='inproc://core/internal/mux_in')
+                                        backend=self.__INTERNAL_MUX_IN__)
 
         self._mux_out = OutputMultiplexer(context=self._ctx,
                                           frontend=output_events,
-                                          backend='inproc://core/internal/mux_out')
+                                          backend=self.__INTERNAL_MUX_OUT__)
 
         self._requests = self._ctx.socket(zmq.REP)
         self._requests.bind(requests)
 
-        self._design = Design()
+    @staticmethod
+    def _register_input_node(available_devices):
+        node = InputNode()
+
+        for (guid, name) in available_devices:
+            device = PhysicalDevice.find(guid=guid, name=name)
+            if device:
+                node.append(device)
+
+        return node
+
+    @staticmethod
+    def _register_output_node(controls, device_capabilities):
+        node = OutputNode()
+
+        remaining_axes = [c for c in controls if isinstance(c, Axis) and not c.is_assigned]
+        remaining_buttons = [c for c in controls if isinstance(c, Button) and not c.is_assigned]
+        remaining_hats = [c for c in controls if isinstance(c, Hat) and not c.is_assigned]
+
+        for dc in device_capabilities:
+            device = VirtualDevice(node=node)
+
+            nb_axes = min(len(remaining_axes), dc['max_nb_axes'])
+            nb_buttons = min(len(remaining_buttons), dc['max_nb_buttons'])
+            nb_hats = min(len(remaining_hats), dc['max_nb_hats'])
+
+            for axis in remaining_axes[0:nb_axes]:
+                device.register_axis(axis)
+
+            for button in remaining_buttons[0:nb_buttons]:
+                device.register_button(button)
+
+            for hat in remaining_hats[0:nb_hats]:
+                device.register_hat(hat)
+
+            remaining_axes = remaining_axes[nb_axes:]
+            remaining_buttons = remaining_buttons[nb_buttons:]
+            remaining_hats = remaining_hats[nb_hats:]
+
+        return node
 
     def _handshake(self):
-        nb_registered_nodes = 0
-        unassigned_inputs = self._design.required_inputs
-        unassigned_controls = list()  # design.controls : XXX: For now, skip output nodes registration
+        parsed_design = njoy_core.core.parsers.design_parser.parse_design()
+        devices = parsed_design['input_devices']
+        controls = parsed_design['controls']
 
-        # Only accepts requests as long as there's still something to be assigned.
-        while unassigned_inputs or unassigned_controls:
-            request = messages.CoreRequest.recv(self._requests)
-            print("Core: received request")
+        # Accepts requests until we've registered all the input and output nodes
+        while devices or controls:
+            request = CoreRequest.recv(self._requests)
 
-            if isinstance(request, messages.InputNodeRegisterRequest):
-                # XXX: How do we know we didn't already have a register request for this particular node ?
-                #      Maybe switch to a ROUTER socket instead, and grab the peer socket identity
-                #      For now, just rely on the fact that the InputNode only registers once, before starting its loop.
-                #      So just keep count of the number of registered nodes and use that as a make-shift node_id.
-                node_id = nb_registered_nodes
-                nb_registered_nodes += 1
+            if isinstance(request, InputNodeRegisterRequest):
+                reply = InputNodeRegisterReply(node=self._register_input_node(request.available_devices))
+                devices = [d for d in devices if not d.is_assigned]
 
-                # XXX: At some point, we should tell the node that we're only interested in a subset of its controls
-                #      For now, just accepts whole devices
-                # XXX: Also, how do we handle multiple devices with the same name ?
-                #    : How unique really are the device GUIDs ?
-                device_ids_map = dict()
-                for device_name in request.devices:
-                    if device_name in unassigned_inputs:
-                        device_ids_map[unassigned_inputs[device_name]['njoy_device_id']] = device_name
-                        del unassigned_inputs[device_name]
-
-                messages.InputNodeRegisterReply(node_id=node_id, device_ids_map=device_ids_map).send(self._requests)
-                print("Core: sent reply")
+            elif isinstance(request, OutputNodeCapabilities):
+                reply = OutputNodeAssignments(node=self._register_output_node(controls, request.capabilities))
+                controls = [c for c in controls if not c.is_assigned]
 
             else:
                 raise CoreException("Unexpected request : {}".format(request.command))
 
-        print("Core: done registering")
+            reply.send(self._requests)
 
-    def _register_output_nodes(self, device_capabilities):
-        def _to_ctrl_assignment(_ctrl):
-            event_kind = {AxisActuator: messages.ControlEventKind.AXIS,
-                          ButtonActuator: messages.ControlEventKind.BUTTON,
-                          HatActuator: messages.ControlEventKind.HAT}
-            return {'event_kind': event_kind[_ctrl], 'ctrl_id': _ctrl.actuator.ctrl_id}
-
-        remaining_axes = list(filter(lambda c: isinstance(c, AxisActuator), self._controls))
-        remaining_buttons = list(filter(lambda c: isinstance(c, ButtonActuator), self._controls))
-        remaining_hats = list(filter(lambda c: isinstance(c, HatActuator), self._controls))
-
-        # TODO: robustness : check if all the controls were assigned or not
-        return [  # Build an assignment structure for each device
-                {'device_id': _id,
-                 'controls': [_to_ctrl_assignment(c)
-                              for c in ([remaining_axes.pop() for _ in range(nb_axes)] +
-                                        [remaining_buttons.pop() for _ in range(nb_buttons)] +
-                                        [remaining_hats.pop() for _ in range(nb_hats)])]}
-
-                # Get as many unassigned actuators as possible, according to each device capabilities
-                for (_id, nb_axes, nb_buttons, nb_hats) in [(dc['device_id'],
-                                                             min(len(remaining_axes), dc['max_nb_axes']),
-                                                             min(len(remaining_buttons), dc['max_nb_buttons']),
-                                                             min(len(remaining_hats), dc['max_nb_hats']))
-                                                            for dc in device_capabilities]]
+        return [Actuator(context=self._ctx,
+                         input_endpoint=self.__INTERNAL_MUX_IN__,
+                         output_endpoint=self.__INTERNAL_MUX_OUT__,
+                         virtual_control=control)
+                for control in parsed_design['controls']]
 
     def run(self):
-        # XXX: stubbed for now : will return a passthrough design with all controls of all known devices
-        # designs can include "from ... import ... as ..." to use device maps
-        # parse design and associated device maps
-        self._handshake()
+        threads = [self._mux_in, self._mux_out]
+        threads.extend(self._handshake())
 
-        print("Starting Muxes")
-        self._mux_in.start()
-        self._mux_out.start()
-        # for control in design.controls:
-        #     grp.start(control)
-        for t in [self._mux_in, self._mux_out]:
+        for t in threads:
+            t.start()
+        for t in threads:
             t.join()
