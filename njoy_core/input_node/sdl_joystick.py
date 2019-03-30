@@ -50,19 +50,14 @@ class SDLJoystick:
         name = sdl2.SDL_JoystickNameForIndex(device_index)
         if not name:
             raise SdlJoystickException(sdl2.SDL_GetError())
-        return name
+        return name.decode('utf-8')
 
     @staticmethod
     def device_list(exclude_list=None):
-        if exclude_list is not None:
-            excluded = {name.encode('utf-8') for name in exclude_list}
-        else:
-            excluded = set()
-
         return [(bytes(guid.data), name)
                 for guid, name in [(SDLJoystick.device_guid(i), SDLJoystick.device_name(i))
                                    for i in range(SDLJoystick.nb_joysticks())]
-                if name not in excluded]
+                if name not in (set(exclude_list) if exclude_list is not None else set())]
 
     @staticmethod
     def to_guid_hex_str(guid):

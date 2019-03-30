@@ -10,38 +10,38 @@ __BASE_DESIGNS_DIR__ = os.path.join(os.path.dirname(__file__),
                                     os.path.pardir,
                                     'njoy_designs')
 
-__PARSER__ = lark.Lark(r"""
-    ?start: device*
-
-    model: "nJoyDesign" name ":" instructions
-    name: ESCAPED_STRING
-
-    instructions: instruction*
-    instruction: mapping_import | device_import | control_def
-
-    mapping_imports: mapping_import
-
-    controls: control*
-
-    control: "axis"                             id           "=>" aliases -> axis
-           | "hat"                              id direction "=>" aliases -> hat
-           | "button"                           id           "=>" aliases -> button
-           | ("not button" | "neither buttons") neither_ids  "=>" aliases -> pseudo_button
-
-    neither_ids: INT+
-    id: INT
-    direction: /(up|down)(-(left|right))?|(left|right)/
-    aliases: ALIAS ("," ALIAS)*
-    ALIAS: /\w+/
-
-    %import common.ESCAPED_STRING
-    %import common.INT
-    %import common.WS
-    %ignore WS
-
-    _COMMENT: /#.*/
-    %ignore _COMMENT
-""", parser='lalr')
+# __PARSER__ = lark.Lark(r"""
+#     ?start: device*
+#
+#     model: "nJoyDesign" name ":" instructions
+#     name: ESCAPED_STRING
+#
+#     instructions: instruction*
+#     instruction: mapping_import | device_import | control_def
+#
+#     mapping_imports: mapping_import
+#
+#     controls: control*
+#
+#     control: "axis"                             id           "=>" aliases -> axis
+#            | "hat"                              id direction "=>" aliases -> hat
+#            | "button"                           id           "=>" aliases -> button
+#            | ("not button" | "neither buttons") neither_ids  "=>" aliases -> pseudo_button
+#
+#     neither_ids: INT+
+#     id: INT
+#     direction: /(up|down)(-(left|right))?|(left|right)/
+#     aliases: ALIAS ("," ALIAS)*
+#     ALIAS: /\w+/
+#
+#     %import common.ESCAPED_STRING
+#     %import common.INT
+#     %import common.WS
+#     %ignore WS
+#
+#     _COMMENT: /#.*/
+#     %ignore _COMMENT
+# """, parser='lalr')
 
 
 def parse_design(design_file=None):
@@ -79,14 +79,14 @@ def parse_design(design_file=None):
 
         # Virtual Buttons
         Button(processor=EssentialToolbox.passthrough,
-               inputs=[Axis(dev='thr', ctrl=0)]),
+               inputs=[Button(dev='thr', ctrl=0)]),
         Button(processor=EssentialToolbox.passthrough,
-               inputs=[Axis(dev='thr', ctrl=22)]),
+               inputs=[Button(dev='thr', ctrl=22)]),
         Button(processor=EssentialToolbox.not_any,
-               inputs=[Axis(dev='thr', ctrl=21),
-                       Axis(dev='thr', ctrl=22)]),
+               inputs=[Button(dev='thr', ctrl=21),
+                       Button(dev='thr', ctrl=22)]),
         Button(processor=EssentialToolbox.passthrough,
-               inputs=[Axis(dev='thr', ctrl=21)]),
+               inputs=[Button(dev='thr', ctrl=21)]),
 
         # Virtual Hats
         Hat(processor=EssentialToolbox.passthrough,

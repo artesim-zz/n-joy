@@ -176,22 +176,28 @@ class CoreRequest:
         self.command = command
         self.payload = payload
 
-    def send(self, socket):
-        def _encoded_command(_p):
-            if isinstance(_p, str):
-                return _p.encode('utf-8')
-            elif isinstance(_p, bytes):
-                return _p
-            else:
-                raise MessageError("Invalid command : {}".format(_p))
+    @staticmethod
+    def _encoded_string(string):
+        if isinstance(string, str):
+            return string.encode('utf-8')
+        elif isinstance(string, bytes):
+            return string
 
-        socket.send_multipart([_encoded_command(self.command)] +
+    @staticmethod
+    def _decoded_string(string):
+        if isinstance(string, str):
+            return string
+        elif isinstance(string, bytes):
+            return string.decode('utf-8')
+
+    def send(self, socket):
+        socket.send_multipart([self._encoded_string(self.command)] +
                               [pickle.dumps(frame) for frame in self.payload])
 
     @classmethod
     def recv(cls, socket):
         frames = socket.recv_multipart()
-        command = frames[0].decode('utf-8')
+        command = cls._decoded_string(frames[0])
         payload = [pickle.loads(frame) for frame in frames[1:]]
         if command == 'register':
             return InputNodeRegisterRequest(available_devices=payload)

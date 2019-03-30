@@ -21,6 +21,11 @@ class VJoyDevice(pyvjoy.VJoyDevice):
         WHEEL = 8
         POV = 9
 
+    @classmethod
+    def nb_devices(cls):
+        # TODO: find a way to ask vjoy how many devices are configured
+        return 2
+
     def __init__(self, device_id):
         """device_id is 0-based, internally converted to vjoy 1-based index."""
         super().__init__(1 + device_id)

@@ -61,19 +61,15 @@ class HatFeeder(Feeder):
 
 
 class VirtualJoystick(threading.Thread):
-    __MAX_NB_DEVICES__ = 16
+    # TODO: find a way to get the current vjoy configuration for that device
     __MAX_NB_AXES__ = 8
     __MAX_NB_BUTTONS__ = 128
     __MAX_NB_HATS__ = 4
 
     @classmethod
-    def max_nb_devices(cls):
-        return cls.__MAX_NB_DEVICES__
-
-    @classmethod
     def device_capabilities(cls, device_id=None):
         if device_id is None:
-            return [cls.device_capabilities(i) for i in range(cls.max_nb_devices())]
+            return [cls.device_capabilities(i) for i in range(vjoy_device.VJoyDevice.nb_devices())]
         else:
             return {'device_id': device_id,
                     'max_nb_axes': cls.__MAX_NB_AXES__,
