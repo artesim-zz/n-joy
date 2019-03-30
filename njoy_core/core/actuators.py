@@ -1,47 +1,47 @@
-import collections
 import threading
 import time
 import zmq
 
-from njoy_core.core.messages import ControlEvent
+import njoy_core.core.messages as msg
+from njoy_core.core.input_buffers import InputBuffer
 
 
 class Actuator(threading.Thread):
-    def __init__(self, *, context, outputs, identity):
+    def __init__(self, *, context, input_endpoint, output_endpoint, virtual_control):
         super().__init__()
         self._ctx = context
         self._socket = self._ctx.socket(zmq.REQ)
-        self._socket.set(zmq.IDENTITY, identity.packed())
-        self._socket.connect(outputs)
-        self._value = None
-        self._output_queue = collections.deque(maxlen=1)
+        self._socket.set(zmq.IDENTITY, msg.VirtualControlEvent.mk_identity(virtual_control))
+        self._socket.connect(output_endpoint)
 
-    @property
-    def identity(self):
-        return self._socket.get(zmq.IDENTITY)
+        self._virtual_control = virtual_control
+        self._input_states = self._init_input_states(virtual_control)
+        self._input_buffer = InputBuffer(context=context,
+                                         input_endpoint=input_endpoint,
+                                         physical_controls=list(self._input_states.keys()))
 
-    @property
-    def value(self):
-        while self._value is None:
-            # Wait 100 µs between each read attempt, to give a chance for other threads to run
-            time.sleep(0.0001)
-        return self._value
+    def _init_input_states(self, virtual_control):
+        physical_controls = virtual_control.physical_inputs
+        for physical_control in physical_controls:
+            physical_control.processor = lambda _: self._input_states[physical_control]
+        return {c: None for c in physical_controls}
 
-    @value.setter
-    def value(self, val):
-        if val != self._value:
-            self._value = val
-            self._output_queue.appendleft(val)
+    def _update_inputs(self):
+        input_states = None
+        while input_states is None:
+            input_states = self._input_buffer.state
+            time.sleep(0.0001)  # Wait 100 µs between each read attempt, to give a chance for other threads to run
+
+        for (c, s) in input_states.items():
+            self._input_states[c] = s
 
     def loop(self, socket):
-        while len(self._output_queue) == 0:
-            # Wait 100 µs between each read attempt, to give a chance for other threads to run
-            time.sleep(0.0001)
-
-        ControlEvent(value=self._output_queue.pop()).send(socket)
-        ControlEvent.recv(socket)
+        self._update_inputs()
+        msg.VirtualControlEvent(value=self._virtual_control.state).send(socket)
+        msg.VirtualControlEvent.recv(socket)
 
     def run(self):
+        self._input_buffer.start()
         while True:
             self.loop(self._socket)
 

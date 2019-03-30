@@ -91,9 +91,8 @@ class AbstractControl(metaclass=AutoRegisteringControl):
     def __init__(self, *, dev=None, ctrl=None, processor=None, inputs=None):
         self.dev = dev
         self.id = ctrl
-        self._processor = processor
-        self._inputs = inputs
-        self._state = None
+        self.processor = processor
+        self._input_controls = inputs or list()
 
     def __repr__(self):
         if self.is_assigned:
@@ -108,13 +107,13 @@ class AbstractControl(metaclass=AutoRegisteringControl):
     def __hash__(self):
         if self.dev is None:
             return hash((self.__class__.__name__,
-                         hash(self._inputs),
-                         id(self._processor),
+                         hash(self._input_controls),
+                         id(self.processor),
                          self.id))
         elif self.dev.node is None:
             return hash((self.__class__.__name__,
-                         hash(self._inputs),
-                         id(self._processor),
+                         hash(self._input_controls),
+                         id(self.processor),
                          self.dev.id,
                          self.id))
         else:
@@ -134,7 +133,7 @@ class AbstractControl(metaclass=AutoRegisteringControl):
     @property
     def physical_inputs(self):
         inputs = set()
-        for control in self._inputs:
+        for control in self._input_controls:
             if control.is_physical_control:
                 inputs.add(control)
             else:
@@ -143,14 +142,7 @@ class AbstractControl(metaclass=AutoRegisteringControl):
 
     @property
     def state(self):
-        if self._processor is not None and self._inputs is not None:
-            return self._processor(*self._inputs)
-        else:
-            return self._state
-
-    @state.setter
-    def state(self, value):
-        self._state = value
+        return self.processor(*self._input_controls)
 
 
 @enum.unique

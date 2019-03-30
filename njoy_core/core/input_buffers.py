@@ -2,39 +2,41 @@ import collections
 import threading
 import zmq
 
-from njoy_core.core.messages import ControlEvent
+from njoy_core.core.messages import PhysicalControlEvent
 
 
 class InputBuffer(threading.Thread):
-    def __init__(self, *, context, inputs, input_identities):
+    def __init__(self, *, context, input_endpoint, physical_controls):
         super().__init__()
 
         self._ctx = context
         self._socket = context.socket(zmq.SUB)
-        self._socket.connect(inputs)
-        for identity in input_identities:
-            self._socket.subscribe(identity.packed())
+        self._socket.connect(input_endpoint)
+        for control in physical_controls:
+            self._socket.subscribe(PhysicalControlEvent.mk_identity(control))
 
-        self._inputs = dict()
-        self._nb_expected_inputs = len(input_identities)
+        self._state = {c: None for c in physical_controls}
         self._output_queue = collections.deque(maxlen=2)
 
+    def _publish_state(self):
+        self._output_queue.appendleft({c: s for (c, s) in self._state.items()})
+
     def initial_loop(self, socket):
-        while len(self._inputs) < self._nb_expected_inputs:
-            event = ControlEvent.recv(socket)
-            self._inputs[event.identity] = event.value
+        while any([value is None for value in self._state.values()]):
+            event = PhysicalControlEvent.recv(socket)
+            self._state[event.control] = event.value
 
         # Put that first full set in the output queue
-        self._output_queue.appendleft(self._inputs)
+        self._publish_state()
 
     def loop(self, socket):
         # Consume the input events as fast as we can, collecting the states in a dict.
         # Older unprocessed states are discarded.
-        event = ControlEvent.recv(socket)
+        event = PhysicalControlEvent.recv(socket)
 
-        if self._inputs[event.identity] != event.value:
-            self._inputs[event.identity] = event.value
-            self._output_queue.appendleft(self._inputs)
+        if self._state[event.control] != event.value:
+            self._state[event.control] = event.value
+            self._publish_state()
 
     def run(self):
         # First loop : receive inputs until we get a first full set
@@ -45,7 +47,7 @@ class InputBuffer(threading.Thread):
             self.loop(self._socket)
 
     @property
-    def inputs(self):
+    def state(self):
         if len(self._output_queue) > 0:
             return self._output_queue.pop()
         else:
