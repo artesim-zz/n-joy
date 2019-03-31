@@ -1,34 +1,76 @@
 import collections
 
-from .node import InputNode, OutputNode
+from .node import InputNode, OutputNode, NodeNotFoundError
 
 
 class DeviceError(Exception):
     pass
 
 
+class DeviceInvalidNodeError(DeviceError):
+    def __init__(self, device_class):
+        self.message = "The provided Node must be either an {}, " \
+                       "or the id of one".format(device_class.__NODE_CLASS__.__name__)
+
+
+class DeviceNotFoundError(DeviceError):
+    def __init__(self, device_class, dev, node):
+        self.message = "No existing {} with id {} in {}".format(device_class.__name__, dev, node)
+
+
+class DeviceInvalidParamsError(DeviceError):
+    def __init__(self):
+        self.message = "Invalid params : must provided an alias, and either a guid or a name (or both)."
+
+
+class DeviceAliasNotFoundError(DeviceError):
+    def __init__(self, device_class, alias):
+        self.message = "No existing {} with alias {}".format(device_class.__name__, alias)
+
+
+class DeviceGuidNotFoundError(DeviceError):
+    def __init__(self, device_class, guid):
+        self.message = "No existing {} with GUID {}".format(device_class.__name__, guid)
+
+
+class DeviceNameNotFoundError(DeviceError):
+    def __init__(self, device_class, name):
+        self.message = "No existing {} with name {}".format(device_class.__name__, name)
+
+
+class DeviceAmbiguousNameError(DeviceError):
+    def __init__(self, device_class, name):
+        self.message = "Found several {} with name {}, please also provide a GUID".format(device_class.__name__, name)
+
+
+class DeviceInvalidLookupError(DeviceError):
+    def __init__(self):
+        self.message = "Invalid lookup : must provided either a (node, dev) couple, an alias, a guid or a name."
+
+
+class DeviceDuplicateAliasError(DeviceError):
+    def __init__(self, device_class, alias):
+        self.message = "We already have a {} with the alias {}".format(device_class.__name__, alias)
+
+
+class DeviceDuplicateGuidError(DeviceError):
+    def __init__(self, device_class, guid):
+        self.message = "We already have a {} with the GUID {}".format(device_class.__name__, guid)
+
+
+class DeviceOverflowError(DeviceError):
+    def __init__(self, control, device, limit):
+        self.message = "Reached max number of {} for {} (max {})".format(control.__class__.__name__, device, limit)
+
+
 class AutoRegisteringDevice(type):
-    __NODE_CLASS__ = OutputNode
+    __NODE_CLASS__ = NotImplemented
 
-    def __call__(cls, *args, node=None, dev=None, enforce_node=True, **kwargs):
-        if isinstance(node, int):
-            node_instance = cls.__NODE_CLASS__(node_id=node)
-        elif isinstance(node, cls.__NODE_CLASS__):
-            node_instance = node
-        elif enforce_node:
-            raise DeviceError("NODE must be either an {}, or the id of one".format(cls.__NODE_CLASS__.__name__))
-        else:
-            node_instance = None
+    def __call__(cls, *args, node=None, enforce_node=True, **kwargs):
+        node_instance = cls._find_node(node, enforce_node)
 
-        if dev is not None:
-            # device id is provided : looking up an existing instance in the given node
-            if dev < len(node_instance):
-                return node_instance[dev]
-            else:
-                raise DeviceError("No existing {} with id {} in {}".format(cls.__name__, dev, node_instance))
-
-        # No device id provided : we're creating a new instance in the given node
-        device = super().__call__(*args, node=node_instance, dev=dev, **kwargs)
+        # Create a new instance in the given node
+        device = super().__call__(*args, **kwargs)
 
         # And register it to the node, if we have one
         if node_instance is not None:
@@ -36,11 +78,38 @@ class AutoRegisteringDevice(type):
 
         return device
 
+    def _find_node(cls, node, raise_error=False):
+        if isinstance(node, int):
+            try:
+                return cls.__NODE_CLASS__.find(node_id=node)
+            except NodeNotFoundError:
+                raise DeviceInvalidNodeError(cls)
+        elif isinstance(node, cls.__NODE_CLASS__):
+            return node
+        elif raise_error:
+            raise DeviceInvalidNodeError(cls)
+        else:
+            return None
+
+    def _find_device_by_id(cls, *, node, dev):
+        node_instance = cls._find_node(node, raise_error=True)
+        if dev < len(node_instance):
+            return node_instance[dev]
+        else:
+            raise DeviceNotFoundError(cls, dev, node_instance)
+
+    def find(cls, *, node, dev):
+        return cls._find_device_by_id(node=node, dev=dev)
+
 
 class AbstractDevice:
-    def __init__(self, *, node=None, dev=None):
-        self.node = node
-        self.id = dev
+    __MAX_NB_AXIS__ = 8
+    __MAX_NB_BUTTONS__ = 128
+    __MAX_NB_HATS__ = 4
+
+    def __init__(self, *args, **kwargs):
+        self.node = None  # Automatically set by the device it is assigned to
+        self.id = None  # Automatically set by the device it is assigned to
         self.axes = dict()
         self.buttons = dict()
         self.hats = dict()
@@ -60,141 +129,94 @@ class AbstractDevice:
     def is_assigned(self):
         return self.node is not None and self.id is not None
 
-
-class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
-    """Represents a physical device, on a physical input node.
-
-    The node is required and must be an existing instance of OutputNode.
-
-    It is automatically registered to the given node and receives an id from it
-
-    No more than 16 devices per node are allowed :
-
-    Later on at run time, we'll receive messages referencing a node_id/device_id, and we'll use that to find the
-    right instance.
-    """
     def register_axis(self, axis):
+        if len(self.axes) == self.__MAX_NB_AXIS__:
+            raise DeviceOverflowError(axis, self, self.__MAX_NB_AXIS__)
         setattr(axis, 'dev', self)
         setattr(axis, 'id', len(self.axes))
         self.axes[axis.id] = axis
 
     def register_button(self, button):
+        if len(self.buttons) == self.__MAX_NB_BUTTONS__:
+            raise DeviceOverflowError(button, self, self.__MAX_NB_BUTTONS__)
         setattr(button, 'dev', self)
         setattr(button, 'id', len(self.buttons))
         self.buttons[button.id] = button
 
     def register_hat(self, hat):
+        if len(self.hats) == self.__MAX_NB_HATS__:
+            raise DeviceOverflowError(hat, self, self.__MAX_NB_HATS__)
         setattr(hat, 'dev', self)
         setattr(hat, 'id', len(self.hats))
         self.hats[hat.id] = hat
 
 
+class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
+    """Represents a virtual device, on a virtual input node.
+
+    The node parameter is required and must be an existing instance of an OutputNode, or an id of one.
+
+    The new VirtualDevice is automatically registered to the given VirtualNode and receives an id from it
+
+    Later on at run time, we'll receive messages referencing a node_id/device_id, and we'll use that to find the
+    right instance.
+
+    A VirtualDevice is a container for up to 8 Axis, 128 Button and 4 Hat instances.
+    """
+    __NODE_CLASS__ = OutputNode
+
+
 class AutoRegisteringPhysicalDevice(AutoRegisteringDevice):
-    __NODE_CLASS__ = InputNode
-    __DEVICES__ = dict()
-    __NAME_INDEX__ = collections.defaultdict(list)  # Allow for several devices with the same name (but distinct GUID)
-    __GUID_INDEX__ = dict()
-    __MAX_DEVICES__ = 256
-
-    def __call__(cls, *args, node=None, dev=None, alias=None, name=None, guid=None, **kwargs):
-        if alias is not None:
-            # The alias is provided : could be for lookup or creation...
-
-            # Option 1 : Only the alias is provided : we're looking for that particular instance, return it
-            if name is None and guid is None:
-                if alias not in cls.__DEVICES__:
-                    raise DeviceError("No existing device with alias {}".format(alias))
-                return cls.__DEVICES__[alias]
-
-            # Option 2 : An existing alias is provided, with a name or GUID : we're updating the existing device
-            if alias in cls.__DEVICES__:
-                device = cls.__DEVICES__[alias]
-                if name is not None:
-                    if device.name is not None:
-                        raise DeviceError("Cannot change the name of an existing device, only add it.")
-                    device.name = name
-                    cls.__NAME_INDEX__[name].append(device)
-                if guid is not None:
-                    if guid in cls.__GUID_INDEX__:
-                        raise DeviceError("Already have a device with GUID {}".format(guid))
-                    if device.guid is not None:
-                        raise DeviceError("Cannot change the GUID of an existing device, only add it.")
-                    device.guid = guid
-                    cls.__GUID_INDEX__[guid] = device
-                return device
-
-            # Option 3 : A new alias is provided with a name, GUID or both : we're creating an instance with that alias
-            if len(cls.__DEVICES__) == cls.__MAX_DEVICES__:
-                raise DeviceError("Reached maximum number of {} (max {})".format(cls.__name__, cls.__MAX_DEVICES__))
-
-            # Ensure the GUID is really unique to us
-            if guid is not None and guid in cls.__GUID_INDEX__:
-                raise DeviceError("Already have a device with GUID {}".format(guid))
-
-            # Now we can safely create the new instance
-            device = super().__call__(*args,
-                                      node=node, dev=dev, alias=alias, name=name, guid=guid, enforce_node=False,
-                                      **kwargs)
-            cls.__DEVICES__[alias] = device
-
-            # Add it to the name and guid indexes
-            if name is not None:
-                cls.__NAME_INDEX__[name].append(device)
-            if guid is not None:
-                cls.__GUID_INDEX__[guid] = device
-
-            # Finally, return the new instance
-            return device
-
-        # No alias were provided : search by GUID if provided (fastest)
-        elif guid is not None:
-            if guid not in cls.__GUID_INDEX__:
-                raise DeviceError("No existing device with GUID {}".format(guid))
-            return cls.__GUID_INDEX__[guid]
-
-        # Or try searching by name, but must be unambiguous
-        elif name is not None:
-            if len(cls.__NAME_INDEX__[name]) == 0:
-                raise DeviceError("No existing device with name {}".format(name))
-            elif len(cls.__NAME_INDEX__[name]) > 1:
-                raise DeviceError("Ambiguous lookup : several devices with name {}".format(name))
-            else:
-                return cls.__NAME_INDEX__[name]
-
-        # If everything fails, try the super-metaclass (searching by node_id/dev_id)
-        else:
-            return super().__call__(*args, node=node, dev=dev, **kwargs)
+    def __call__(cls, *args, alias=None, guid=None, name=None, **kwargs):
+        if alias is None or (guid is None and name is None):
+            raise DeviceInvalidParamsError()
+        return super().__call__(*args, node=None, enforce_node=False, alias=alias, guid=guid, name=name)
 
 
 class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
     """Represents a physical device in a physical input node.
 
-    Unlike VirtualDevices, a PhysicalDevice doesn't strictly require a node if it is created while parsing a design.
-    But in this case it still requires an alias, and either a name or a GUID (or both).
+    A PhysicalDevice is created while parsing a design and requires an alias and either a name or a GUID (or both),
+    instead of a node.
+    The alias and the GUID must be unique.
+    The name may not be unique, but must be disambiguated by a GUID (existing instances also checked).
+    The PhysicalDevice is then considered unassigned until it is registered to a node during the handshake phase.
 
     When parsing the controls, the PhysicalDevices will typically be retrieved by alias.
+    During the handshake phase, the PhysicalDevices will be retrieved by GUID or by name.
+    Finally at run time, the PhysicalDevices will be retrieved node_id/device_id from the event messages.
 
-    At this stage the PhysicalDevices are still considered unassigned.
-
-    During the handshake phase, the PhysicalDevices are assigned to the newly registered nodes, and will be retrieved
-    by GUID or by name.
-
-    Finally at run time, we'll receive messages referencing a node/device and we'll use that to find the right instance.
-
-    When no alias, name or GUID is provided, a node is required and must be an existing instance of InputNode :
-
-    It is automatically registered to the given node and receives an id from it
-
-    No more than 16 devices per node are allowed :
-
-    Later on at run time, we'll receive messages referencing a node_id/device_id, and we'll use that to find the
-    right instance.
+    A PhysicalDevice is a container for up to 8 Axis, 128 Button and 4 Hat instances.
     """
-    def __init__(self, *, node=None, dev=None, alias=None, name=None, guid=None):
-        super().__init__(node=node, dev=dev)
+    __NODE_CLASS__ = InputNode
+    __ALIAS_INDEX__ = dict()
+    __NAME_INDEX__ = collections.defaultdict(list)  # Allow for several devices with the same name (but distinct GUID)
+    __GUID_INDEX__ = dict()
+
+    def __init__(self, *args, alias=None, guid=None, name=None, **kwargs):
+        super().__init__(*args, **kwargs)
         self.alias = alias
-        self.name = name
         self.guid = guid
+        self.name = name
+
+    def __setattr__(self, key, value):
+        if key == 'alias' and value is not None:
+            if value in self.__ALIAS_INDEX__:
+                raise DeviceDuplicateAliasError(self.__class__, value)
+            self.__ALIAS_INDEX__[value] = self
+
+        elif key == 'guid' and value is not None:
+            if value in self.__GUID_INDEX__:
+                raise DeviceDuplicateGuidError(self.__class__, value)
+            self.__GUID_INDEX__[value] = self
+
+        elif key == 'name' and value is not None:
+            if len(self.__NAME_INDEX__[value]) > 0 and \
+                    (self.guid is None or any([d.guid is None for d in self.__NAME_INDEX__[value]])):
+                raise DeviceAmbiguousNameError(self.__class__, value)
+            self.__NAME_INDEX__[value].append(self)
+
+        super().__setattr__(key, value)
 
     def __hash__(self):
         return hash((self.node.id if self.node is not None else None,
@@ -204,13 +226,30 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
                      self.guid))
 
     @classmethod
-    def find(cls, *, guid, name):
-        try:
-            device = PhysicalDevice(guid=guid, name=name)
-            if device.guid is None and guid is not None:
-                device = PhysicalDevice(alias=device.alias, guid=guid)
-            if device.name is None and name is not None:
-                device = PhysicalDevice(alias=device.alias, name=name)
-            return device
-        except DeviceError:
-            return None
+    def find(cls, *, node=None, dev=None, alias=None, guid=None, name=None):
+        if node is not None and dev is not None:
+            return cls._find_device_by_id(node=node, dev=dev)
+
+        if alias is not None:
+            if alias in cls.__ALIAS_INDEX__:
+                return cls.__ALIAS_INDEX__[alias]
+            elif guid is None and name is None:
+                raise DeviceAliasNotFoundError(cls, alias)
+
+        if guid is not None:
+            if guid in cls.__GUID_INDEX__:
+                return cls.__GUID_INDEX__[guid]
+            elif name is None:
+                raise DeviceGuidNotFoundError(cls, guid)
+
+        if name is not None:
+            if name in cls.__NAME_INDEX__:
+                names = cls.__NAME_INDEX__[name]
+                if len(names) > 1:
+                    raise DeviceAmbiguousNameError(cls, name)
+                else:
+                    return names[0]
+            else:
+                raise DeviceNameNotFoundError(cls, name)
+
+        raise DeviceInvalidLookupError()

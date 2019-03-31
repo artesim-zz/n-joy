@@ -63,7 +63,7 @@ class AbstractNode(collections.MutableSequence, metaclass=AutoIndexingNode):
 
     def __init__(self):
         self._devices = list()
-        self.id = None
+        self.id = None  # Automatically set by the metaclass when instantiated
 
     def __repr__(self):
         return '<{} {:02d}>'.format(self.__class__.__name__, getattr(self, 'id'))
