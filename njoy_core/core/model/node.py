@@ -10,6 +10,8 @@ The limit is per-subclass, so even if we reached the max number of InputNode her
 
 Later on at run time, we'll receive messages referencing a node id, and we'll use that to find the instance.
 
+A node is a container for up to 16 devices.
+
 """
 import abc
 import collections
@@ -19,30 +21,49 @@ class NodeError(Exception):
     pass
 
 
+class NodeOverflowError(NodeError):
+    def __init__(self, node_class):
+        self.message = "Reached max number of {} (max {})".format(node_class.__name__, node_class.__MAX_NODES__)
+
+
+class NodeDeviceOverflowError(NodeError):
+    def __init__(self, node):
+        self.message = "Reached max number of devices for {} (max {})".format(node.__class__.__name__,
+                                                                              node.__MAX_DEVICES__)
+
+
+class NodeNotFoundError(NodeError):
+    def __init__(self, node_class, node_id):
+        self.message = "No existing {} with id {}".format(node_class.__name__, node_id)
+
+
 class AutoIndexingNode(abc.ABCMeta):
     __NODES__ = collections.defaultdict(list)
     __MAX_NODES__ = NotImplemented
 
-    def __call__(cls, *args, node_id=None, **kwargs):
-        if node_id is None:
-            node_id = len(cls.__NODES__[cls])
-            if node_id == cls.__MAX_NODES__:
-                raise NodeError("Reached maximum number of {} (max {})".format(cls.__name__, cls.__MAX_NODES__))
-            node = super().__call__(*args, node_id=node_id, **kwargs)
-            cls.__NODES__[cls].append(node)
-            return node
-        elif node_id < len(cls.__NODES__[cls]):
-            return cls.__NODES__[cls][node_id]
-        else:
-            raise NodeError("No existing {} with id {}".format(cls.__name__, node_id))
+    def __call__(cls, *args, **kwargs):
+        node_id = len(cls.__NODES__[cls])
+        if node_id == cls.__MAX_NODES__:
+            raise NodeOverflowError(cls)
+        node = super().__call__(*args, **kwargs)
+        node.id = node_id
+        cls.__NODES__[cls].append(node)
+        return node
 
 
 class AbstractNode(collections.MutableSequence, metaclass=AutoIndexingNode):
     __MAX_DEVICES__ = 16
 
-    def __init__(self, *, node_id=None):
-        self.id = node_id
+    @classmethod
+    def find(cls, *, node_id):
+        if node_id < len(cls.__NODES__[cls]):
+            return cls.__NODES__[cls][node_id]
+        else:
+            raise NodeNotFoundError(cls, node_id)
+
+    def __init__(self):
         self._devices = list()
+        self.id = None
 
     def __repr__(self):
         return '<{} {:02d}>'.format(self.__class__.__name__, getattr(self, 'id'))
@@ -62,7 +83,7 @@ class AbstractNode(collections.MutableSequence, metaclass=AutoIndexingNode):
     def insert(self, index, device):
         device_id = len(self._devices)
         if device_id == self.__MAX_DEVICES__:
-            raise NodeError("Reached max number of devices in {} (max {})".format(self, self.__MAX_DEVICES__))
+            raise NodeDeviceOverflowError(self)
         setattr(device, 'node', self)
         setattr(device, 'id', device_id)
         self._devices.insert(index, device)
