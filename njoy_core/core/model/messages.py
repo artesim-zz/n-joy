@@ -3,10 +3,14 @@ import pickle
 import struct
 
 from .devices import PhysicalDevice, VirtualDevice
-from .controls import Axis, Button, Hat
+from .controls import AbstractControl, Axis, Button, Hat
 
 
 class MessageError(Exception):
+    pass
+
+
+class MessageIdentityError(MessageError):
     pass
 
 
@@ -86,8 +90,11 @@ class ControlEvent:
 
     @classmethod
     def mk_identity(cls, control):
-        if not control.is_assigned:
-            raise MessageError("Cannot make a socket identity out of unassigned controls.")
+        if not isinstance(control, AbstractControl):
+            raise MessageIdentityError("Invalid control class.")
+
+        elif not control.is_assigned:
+            raise MessageIdentityError("Cannot make a socket identity out of unassigned controls.")
 
         elif isinstance(control, Axis):
             return cls.__IDENTITY_PACKER.pack((control.dev.node.id & 0xF) << 12 |
@@ -103,8 +110,6 @@ class ControlEvent:
                                               (control.dev.id & 0xF) << 8 |
                                               0xC0 |
                                               (control.id & 0x03))
-        else:
-            raise MessageError("Invalid control class.")
 
     def _serialize_control(self):
         if self.control is None:

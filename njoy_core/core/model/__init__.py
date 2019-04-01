@@ -8,6 +8,7 @@ from .devices import DeviceDuplicateAliasError, DeviceDuplicateGuidError, Device
 from .devices import DeviceRegisterControlError
 from .controls import Axis, Button, Hat
 from .controls import ControlInvalidDeviceError
-from .messages import HatState, PhysicalControlEvent, VirtualControlEvent
+from .messages import HatState, ControlEvent, PhysicalControlEvent, VirtualControlEvent
 from .messages import CoreRequest, InputNodeRegisterRequest, InputNodeRegisterReply
 from .messages import OutputNodeCapabilities, OutputNodeAssignments
+from .messages import MessageIdentityError
