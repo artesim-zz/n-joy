@@ -19,7 +19,6 @@ The control state is set by the Core (actually, the Actuator), when the correspo
 If 'processor' is provided, is must be a callable taking the controls provided in 'inputs' as parameters.
 The control state is then set to the return value of 'processor'.
 """
-import enum
 
 from .device import AbstractDevice, PhysicalDevice
 
@@ -121,27 +120,6 @@ class AbstractControl(metaclass=AutoRegisteringControl):
     @property
     def state(self):
         return self.processor(*self._input_controls)
-
-
-@enum.unique
-class HatState(enum.IntFlag):
-    HAT_CENTER = 0
-    HAT_UP = 1
-    HAT_RIGHT = 2
-    HAT_DOWN = 4
-    HAT_LEFT = 8
-    HAT_UP_RIGHT = HAT_UP | HAT_RIGHT
-    HAT_UP_LEFT = HAT_UP | HAT_LEFT
-    HAT_DOWN_RIGHT = HAT_DOWN | HAT_RIGHT
-    HAT_DOWN_LEFT = HAT_DOWN | HAT_LEFT
-
-    @classmethod
-    def list(cls):
-        return [v for v in cls]
-
-    @classmethod
-    def set(cls):
-        return {v for v in cls}
 
 
 class Axis(AbstractControl):

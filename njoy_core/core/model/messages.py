@@ -1,12 +1,34 @@
+import enum
 import pickle
 import struct
 
-from .model import PhysicalDevice, VirtualDevice
-from .model import HatState, Axis, Button, Hat
+from .device import PhysicalDevice, VirtualDevice
+from .control import Axis, Button, Hat
 
 
 class MessageError(Exception):
     pass
+
+
+@enum.unique
+class HatState(enum.IntFlag):
+    HAT_CENTER = 0
+    HAT_UP = 1
+    HAT_RIGHT = 2
+    HAT_DOWN = 4
+    HAT_LEFT = 8
+    HAT_UP_RIGHT = HAT_UP | HAT_RIGHT
+    HAT_UP_LEFT = HAT_UP | HAT_LEFT
+    HAT_DOWN_RIGHT = HAT_DOWN | HAT_RIGHT
+    HAT_DOWN_LEFT = HAT_DOWN | HAT_LEFT
+
+    @classmethod
+    def list(cls):
+        return [v for v in cls]
+
+    @classmethod
+    def set(cls):
+        return {v for v in cls}
 
 
 class ControlEvent:

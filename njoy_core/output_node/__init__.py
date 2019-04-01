@@ -2,7 +2,7 @@ import multiprocessing
 import threading
 import zmq
 
-from njoy_core.core.messages import OutputNodeCapabilities, OutputNodeAssignments
+from njoy_core.core.model import OutputNodeCapabilities, OutputNodeAssignments
 from .virtual_joystick import VirtualJoystick
 
 

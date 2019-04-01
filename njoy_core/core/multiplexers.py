@@ -1,7 +1,7 @@
 import threading
 import zmq
 
-from njoy_core.core.messages import VirtualControlEvent
+from njoy_core.core.model import VirtualControlEvent
 
 
 class OutputMultiplexerError(Exception):

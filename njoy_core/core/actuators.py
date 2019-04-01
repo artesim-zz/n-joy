@@ -2,8 +2,8 @@ import threading
 import time
 import zmq
 
-import njoy_core.core.messages as msg
-from njoy_core.core.input_buffers import InputBuffer
+from njoy_core.core.model import VirtualControlEvent
+from .input_buffers import InputBuffer
 
 
 class Actuator(threading.Thread):
@@ -11,7 +11,7 @@ class Actuator(threading.Thread):
         super().__init__()
         self._ctx = context
         self._socket = self._ctx.socket(zmq.REQ)
-        self._socket.set(zmq.IDENTITY, msg.VirtualControlEvent.mk_identity(virtual_control))
+        self._socket.set(zmq.IDENTITY, VirtualControlEvent.mk_identity(virtual_control))
         self._socket.connect(output_endpoint)
 
         self._virtual_control = virtual_control
@@ -37,8 +37,8 @@ class Actuator(threading.Thread):
 
     def loop(self, socket):
         self._update_inputs()
-        msg.VirtualControlEvent(value=self._virtual_control.state).send(socket)
-        msg.VirtualControlEvent.recv(socket)
+        VirtualControlEvent(value=self._virtual_control.state).send(socket)
+        VirtualControlEvent.recv(socket)
 
     def run(self):
         self._input_buffer.start()

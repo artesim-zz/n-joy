@@ -3,9 +3,9 @@ import zmq
 
 import njoy_core.core.parsers.design_parser
 from .actuators import Actuator
-from .messages import CoreRequest
-from .messages import InputNodeRegisterRequest, InputNodeRegisterReply
-from .messages import OutputNodeCapabilities, OutputNodeAssignments
+from .model import CoreRequest
+from .model import InputNodeRegisterRequest, InputNodeRegisterReply
+from .model import OutputNodeCapabilities, OutputNodeAssignments
 from .model import InputNode, OutputNode, PhysicalDevice, VirtualDevice, Axis, Button, Hat
 from .multiplexers import InputMultiplexer, OutputMultiplexer
 

@@ -2,7 +2,7 @@ import collections
 import threading
 import zmq
 
-from njoy_core.core.messages import PhysicalControlEvent
+from njoy_core.core.model import PhysicalControlEvent
 
 
 class InputBuffer(threading.Thread):
