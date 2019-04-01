@@ -63,6 +63,13 @@ class DeviceOverflowError(DeviceError):
         self.message = "Reached max number of {} for {} (max {})".format(control.__class__.__name__, device, limit)
 
 
+class DeviceRegisterControlError(DeviceError):
+    def __init__(self, control, ctrl_id, device):
+        self.message = "Couldn't register the {} with id {}, {} already has one.".format(control.__class__.__name__,
+                                                                                         ctrl_id,
+                                                                                         device)
+
+
 class AutoRegisteringDevice(type):
     __NODE_CLASS__ = NotImplemented
 
@@ -108,8 +115,8 @@ class AbstractDevice:
     __MAX_NB_HATS__ = 4
 
     def __init__(self, *args, **kwargs):
-        self.node = None  # Automatically set by the device it is assigned to
-        self.id = None  # Automatically set by the device it is assigned to
+        self.node = None  # Automatically set by the node it is assigned to
+        self.id = None  # Automatically set by the node it is assigned to
         self.axes = dict()
         self.buttons = dict()
         self.hats = dict()
@@ -129,25 +136,31 @@ class AbstractDevice:
     def is_assigned(self):
         return self.node is not None and self.id is not None
 
-    def register_axis(self, axis):
+    def register_axis(self, axis, *, ctrl_id=None):
+        if ctrl_id is not None and ctrl_id in self.axes:
+            raise DeviceRegisterControlError(axis, ctrl_id, self)
         if len(self.axes) == self.__MAX_NB_AXIS__:
             raise DeviceOverflowError(axis, self, self.__MAX_NB_AXIS__)
         setattr(axis, 'dev', self)
-        setattr(axis, 'id', len(self.axes))
+        setattr(axis, 'id', ctrl_id or len(self.axes))
         self.axes[axis.id] = axis
 
-    def register_button(self, button):
+    def register_button(self, button, *, ctrl_id=None):
+        if ctrl_id is not None and ctrl_id in self.buttons:
+            raise DeviceRegisterControlError(button, ctrl_id, self)
         if len(self.buttons) == self.__MAX_NB_BUTTONS__:
             raise DeviceOverflowError(button, self, self.__MAX_NB_BUTTONS__)
         setattr(button, 'dev', self)
-        setattr(button, 'id', len(self.buttons))
+        setattr(button, 'id', ctrl_id or len(self.buttons))
         self.buttons[button.id] = button
 
-    def register_hat(self, hat):
+    def register_hat(self, hat, *, ctrl_id=None):
+        if ctrl_id is not None and ctrl_id in self.hats:
+            raise DeviceRegisterControlError(hat, ctrl_id, self)
         if len(self.hats) == self.__MAX_NB_HATS__:
             raise DeviceOverflowError(hat, self, self.__MAX_NB_HATS__)
         setattr(hat, 'dev', self)
-        setattr(hat, 'id', len(self.hats))
+        setattr(hat, 'id', ctrl_id or len(self.hats))
         self.hats[hat.id] = hat
 
 

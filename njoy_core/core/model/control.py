@@ -1,29 +1,20 @@
 """Controls are the models representing the axes, buttons and hats managed by njoy.
 
-They also are building blocks that are assembled together according to the nJoy Design, to produce the final controls
+They also are building blocks that are assembled together according to an nJoy Design, to produce the final controls
 of the Virtual Devices.
-
--- 'dev' and 'ctrl' parameters --
 
 If neither 'dev' nor 'ctrl' is specified, a new unassigned control instance is created.
 
-If 'dev' is specified without a 'ctrl' id, a new control instance is created and registered to the corresponding
-device, and the control id is automatically assigned. 'dev' must be either an existing device instance, or an alias
-to one.
+If 'dev' is specified, a new control instance is created and registered to the corresponding device, and the control
+id is automatically assigned. 'dev' must be either an existing device instance, or an alias to one.
 
-Each device can only hold a maximum of 8 axis, 128 buttons and 4 hats.
+If 'ctrl_id' is also specified, the device will try to register the new control with this id (if available).
 
-If both 'dev' and 'ctrl' are specified, the corresponding control will be looked up in the given device.
+Providing 'ctrl_id' without 'dev' doesn't make sense : the behavior is unspecified, but it will probably result in an
+unassigned control, completely ignoring 'ctrl_id'.
 
-Special case : if 'dev' is a physical device and the provided control doesn't exist, it will instead be created
-with the given id.
-
-Specifying only 'ctrl' doesn't make sense, and will raise an error (we wouldn't know where to look for it).
-
--- 'processor' and 'inputs' parameters --
-
-The 'processor' and 'inputs' can be left out for controls attached to a physical device ("physical controls").
-The control state is then set by the core, according to the corresponding input buffer.
+The 'processor' and 'inputs' can be left out for controls registered to a physical device ("physical controls").
+The control state is set by the Core (actually, the Actuator), when the corresponding input buffer has changed.
 
 If 'processor' is provided, is must be a callable taking the controls provided in 'inputs' as parameters.
 The control state is then set to the return value of 'processor'.
@@ -37,60 +28,47 @@ class ControlError(Exception):
     pass
 
 
+class ControlInvalidDeviceError(ControlError):
+    def __init__(self):
+        self.message = "dev must be a Device instance, or an alias of one"
+
+
 class AutoRegisteringControl(type):
-    __CONTROL_GROUP_ATTRIBUTE__ = NotImplemented
-    __MAX_PER_DEVICE__ = NotImplemented
+    __REGISTER_METHOD__ = NotImplemented
 
-    def __call__(cls, *args, dev=None, ctrl=None, **kwargs):
-        if isinstance(dev, str):
-            device_instance = PhysicalDevice(alias=dev)
-        elif issubclass(dev.__class__, AbstractDevice):
-            device_instance = dev
-        elif dev is not None:
-            raise ControlError("dev must be a Device instance, or an alias of one")
-        elif ctrl is not None:
-            raise ControlError("Provided control id {} without a device : don't know where to look !".format(ctrl))
-        else:
-            # No device provided, just instantiate as an unassigned control and return that
-            return super().__call__(*args, dev=None, ctrl=None, **kwargs)
+    def __call__(cls, *args, dev=None, ctrl_id=None, **kwargs):
+        # First create the control
+        control = super().__call__(*args, **kwargs)
 
-        # At this point, we do have a device instance
-        if ctrl is not None:
-            # control id is also provided : looking up an existing instance in the given device
-            ctrl_group = getattr(device_instance, cls.__CONTROL_GROUP_ATTRIBUTE__)
-            if ctrl in ctrl_group:
-                return ctrl_group[ctrl]
-            elif isinstance(device_instance, PhysicalDevice):
-                # No control with this id in the device, but it's a PhysicalDevice so we'll create it right away
-                if ctrl < cls.__MAX_PER_DEVICE__:
-                    control = super().__call__(*args, dev=device_instance, ctrl=ctrl, **kwargs)
-                    ctrl_group[ctrl] = control
-                    return control
-                else:
-                    raise ControlError("Max number of {} in {} is {}".format(cls.__CONTROL_GROUP_ATTRIBUTE__,
-                                                                             device_instance,
-                                                                             cls.__MAX_PER_DEVICE__))
+        # Then, if a device instance was provided, register it
+        device_instance = cls._find_device(dev)
+        if device_instance is not None:
+            register_method = getattr(device_instance, cls.__REGISTER_METHOD__)
+            if ctrl_id is None:
+                register_method(control)
             else:
-                raise ControlError("No {} with id {} in {}".format(cls.__name__, ctrl, device_instance))
+                register_method(control, ctrl_id=ctrl_id)
 
-        # No control id provided : we're creating a new instance in the given device and registering it
-        ctrl_group = getattr(device_instance, cls.__CONTROL_GROUP_ATTRIBUTE__)
-        ctrl_id = len(ctrl_group)
-        if ctrl_id >= cls.__MAX_PER_DEVICE__:
-            raise ControlError("Reached max number of {} in {} (max {})".format(cls.__CONTROL_GROUP_ATTRIBUTE__,
-                                                                                device_instance,
-                                                                                cls.__MAX_PER_DEVICE__))
-        control = super().__call__(*args, dev=device_instance, ctrl=ctrl_id, **kwargs)
-        ctrl_group[ctrl_id] = control
         return control
+
+    @staticmethod
+    def _find_device(dev):
+        if isinstance(dev, str):
+            return PhysicalDevice.find(alias=dev)
+        elif issubclass(dev.__class__, AbstractDevice):
+            return dev
+        elif dev is not None:
+            raise ControlInvalidDeviceError()
+        else:
+            return None
 
 
 class AbstractControl(metaclass=AutoRegisteringControl):
-    __CONTROL_GROUP_ATTRIBUTE__ = NotImplemented
+    __REGISTER_METHOD__ = NotImplemented
 
-    def __init__(self, *, dev=None, ctrl=None, processor=None, inputs=None):
-        self.dev = dev
-        self.id = ctrl
+    def __init__(self, *, processor=None, inputs=None, **_kwargs):
+        self.dev = None  # Automatically set by the device it is assigned to
+        self.id = None  # Automatically set by the device it is assigned to
         self.processor = processor
         self._input_controls = inputs or list()
 
@@ -99,7 +77,7 @@ class AbstractControl(metaclass=AutoRegisteringControl):
             return '<{} /{:02d}/{:02d}/{}/{:02d}>'.format(self.__class__.__name__,
                                                           self.dev.node.id,
                                                           self.dev.id,
-                                                          self.__CONTROL_GROUP_ATTRIBUTE__,
+                                                          self.__REGISTER_METHOD__,
                                                           self.id)
         else:
             return '<Unassigned {}>'.format(self.__class__.__name__)
@@ -167,15 +145,12 @@ class HatState(enum.IntFlag):
 
 
 class Axis(AbstractControl):
-    __CONTROL_GROUP_ATTRIBUTE__ = 'axes'
-    __MAX_PER_DEVICE__ = 8
+    __REGISTER_METHOD__ = 'register_axis'
 
 
 class Button(AbstractControl):
-    __CONTROL_GROUP_ATTRIBUTE__ = 'buttons'
-    __MAX_PER_DEVICE__ = 128
+    __REGISTER_METHOD__ = 'register_button'
 
 
 class Hat(AbstractControl):
-    __CONTROL_GROUP_ATTRIBUTE__ = 'hats'
-    __MAX_PER_DEVICE__ = 4
+    __REGISTER_METHOD__ = 'register_hat'

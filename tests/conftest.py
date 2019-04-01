@@ -2,8 +2,7 @@ import collections
 import pytest
 import njoy_core.core.model
 
-collect_ignore = ["njoy_core/core/model/test_control.py",
-                  "njoy_core/core/test_actuators.py",
+collect_ignore = ["njoy_core/core/test_actuators.py",
                   "njoy_core/core/test_core.py",
                   "njoy_core/core/test_core_controls.py",
                   "njoy_core/core/test_input_buffers.py",
