@@ -2,7 +2,7 @@ import threading
 import zmq
 
 import njoy_core.core.parsers.design_parser
-from .actuators import Actuator
+from .actuator import Actuator
 from .model import CoreRequest
 from .model import InputNodeRegisterRequest, InputNodeRegisterReply
 from .model import OutputNodeCapabilities, OutputNodeAssignments

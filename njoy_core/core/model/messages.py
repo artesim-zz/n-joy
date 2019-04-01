@@ -2,8 +2,8 @@ import enum
 import pickle
 import struct
 
-from .device import PhysicalDevice, VirtualDevice
-from .control import Axis, Button, Hat
+from .devices import PhysicalDevice, VirtualDevice
+from .controls import Axis, Button, Hat
 
 
 class MessageError(Exception):

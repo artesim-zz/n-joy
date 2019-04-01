@@ -20,7 +20,7 @@ If 'processor' is provided, is must be a callable taking the controls provided i
 The control state is then set to the return value of 'processor'.
 """
 
-from .device import AbstractDevice, PhysicalDevice
+from .devices import AbstractDevice, PhysicalDevice
 
 
 class ControlError(Exception):

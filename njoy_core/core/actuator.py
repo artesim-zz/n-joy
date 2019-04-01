@@ -3,7 +3,7 @@ import time
 import zmq
 
 from njoy_core.core.model import VirtualControlEvent
-from .input_buffers import InputBuffer
+from .input_buffer import InputBuffer
 
 
 class Actuator(threading.Thread):
@@ -44,15 +44,3 @@ class Actuator(threading.Thread):
         self._input_buffer.start()
         while True:
             self.loop(self._socket)
-
-
-class AxisActuator(Actuator):
-    pass
-
-
-class ButtonActuator(Actuator):
-    pass
-
-
-class HatActuator(Actuator):
-    pass

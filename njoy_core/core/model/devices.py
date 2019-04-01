@@ -1,6 +1,6 @@
 import collections
 
-from .node import InputNode, OutputNode, NodeNotFoundError
+from .nodes import InputNode, OutputNode, NodeNotFoundError
 
 
 class DeviceError(Exception):
