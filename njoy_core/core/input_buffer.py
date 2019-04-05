@@ -1,11 +1,25 @@
 import collections
 import threading
+import time
 import zmq
 
 from njoy_core.core.model import PhysicalControlEvent
 
 
 class InputBuffer(threading.Thread):
+    """Input Buffer for the Actuators.
+
+    It has two consecutive loops :
+    - The initial loop collects events until we have a full set of control values.
+      When we do, this full state is put in an internal queue, so it can be consumed
+      when reading the state property.
+      The internal queue remains empty during this phase.
+
+    - The main loop collects events as fast as it can, but only publishes a new state when something changed.
+
+    The state property is a blocking call, which is waiting for a state to be put in the queue
+    It then pops and return it, so each state change is only consumed once."""
+
     def __init__(self, *, context, input_endpoint, physical_controls):
         super().__init__()
 
@@ -16,18 +30,19 @@ class InputBuffer(threading.Thread):
             self._socket.subscribe(PhysicalControlEvent.mk_identity(control))
 
         self._state = {c: None for c in physical_controls}
-        self._output_queue = collections.deque(maxlen=2)
+        self._state_queue = collections.deque(maxlen=2)
 
     def _publish_state(self):
-        self._output_queue.appendleft({c: s for (c, s) in self._state.items()})
+        self._state_queue.appendleft({c: s for (c, s) in self._state.items()})
 
     def initial_loop(self, socket):
-        while any([value is None for value in self._state.values()]):
-            event = PhysicalControlEvent.recv(socket)
-            self._state[event.control] = event.value
+        # Consume the first events and collect them
+        event = PhysicalControlEvent.recv(socket)
+        self._state[event.control] = event.value
 
-        # Put that first full set in the output queue
-        self._publish_state()
+        # Delay publishing into the output queue until we have a first full set
+        if not any([value is None for value in self._state.values()]):
+            self._publish_state()
 
     def loop(self, socket):
         # Consume the input events as fast as we can, collecting the states in a dict.
@@ -40,7 +55,8 @@ class InputBuffer(threading.Thread):
 
     def run(self):
         # First loop : receive inputs until we get a first full set
-        self.initial_loop(self._socket)
+        while len(self._state_queue) == 0:
+            self.initial_loop(self._socket)
 
         # Then start the actual event loop : now we only test for changes
         while True:
@@ -48,7 +64,7 @@ class InputBuffer(threading.Thread):
 
     @property
     def state(self):
-        if len(self._output_queue) > 0:
-            return self._output_queue.pop()
-        else:
-            return None
+        # Blocking call : wait 100 µs between each read attempt, to give a chance for other threads to run
+        while len(self._state_queue) == 0:
+            time.sleep(0.0001)
+        return self._state_queue.pop()

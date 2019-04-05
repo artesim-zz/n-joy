@@ -76,7 +76,7 @@ class AbstractControl(metaclass=AutoRegisteringControl):
             return '<{} /{:02d}/{:02d}/{}/{:02d}>'.format(self.__class__.__name__,
                                                           self.dev.node.id,
                                                           self.dev.id,
-                                                          self.__REGISTER_METHOD__,
+                                                          self.__class__.__name__.lower(),
                                                           self.id)
         else:
             return '<Unassigned {}>'.format(self.__class__.__name__)

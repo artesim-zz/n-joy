@@ -75,10 +75,10 @@ class ControlEvent:
     __HAT_VALUE_PACKER__ = struct.Struct('>B')
     __AXIS_VALUE_PACKER__ = struct.Struct('>d')
 
-    __CTRL_CLS__ = {0x0080: Axis,
-                    0x0000: Button,
-                    0x0040: Button,
-                    0x00C0: Hat}
+    __CTRL_GROUP__ = {0x0080: 'axes',
+                      0x0000: 'buttons',
+                      0x0040: 'buttons',
+                      0x00C0: 'hats'}
     __CTRL_ID_MASK__ = {0x0080: 0x0007,
                         0x0000: 0x007F,
                         0x00C0: 0x0003}
@@ -151,11 +151,11 @@ class ControlEvent:
     @classmethod
     def _deserialize_control(cls, control_frame):
         unpacked = cls.__IDENTITY_PACKER.unpack(control_frame)
-        dev = cls.__DEV_CLASS__(node=(unpacked[0] & 0xF000) >> 12,
-                                dev=(unpacked[0] & 0x0F00) >> 8)
-        ctrl_class = cls.__CTRL_CLS__[unpacked[0] & 0x00C0]
+        dev = cls.__DEV_CLASS__.find(node=(unpacked[0] & 0xF000) >> 12,
+                                     dev=(unpacked[0] & 0x0F00) >> 8)
+        ctrl_grp = getattr(dev, cls.__CTRL_GROUP__[unpacked[0] & 0x00C0])
         ctrl_id = unpacked[0] & cls.__CTRL_ID_MASK__[unpacked[0] & 0x00C0]
-        return ctrl_class(dev=dev, ctrl=ctrl_id)
+        return ctrl_grp[ctrl_id]
 
     @classmethod
     def _deserialize_value(cls, value_frames):
