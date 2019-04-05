@@ -3,3 +3,4 @@ PySDL2>=0.9.6
 pyvjoy
 lark-parser>=0.6.7
 pytest>=4.3.1
+pytest-mock>=1.10
