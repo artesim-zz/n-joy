@@ -35,19 +35,19 @@ class InputBuffer(threading.Thread):
     def _publish_state(self):
         self._state_queue.appendleft({c: s for (c, s) in self._state.items()})
 
-    def initial_loop(self, socket):
+    def initial_loop(self):
         # Consume the first events and collect them
-        event = PhysicalControlEvent.recv(socket)
+        event = PhysicalControlEvent.recv(self._socket)
         self._state[event.control] = event.value
 
         # Delay publishing into the output queue until we have a first full set
         if not any([value is None for value in self._state.values()]):
             self._publish_state()
 
-    def loop(self, socket):
+    def loop(self):
         # Consume the input events as fast as we can, collecting the states in a dict.
         # Older unprocessed states are discarded.
-        event = PhysicalControlEvent.recv(socket)
+        event = PhysicalControlEvent.recv(self._socket)
 
         if self._state[event.control] != event.value:
             self._state[event.control] = event.value
@@ -56,11 +56,11 @@ class InputBuffer(threading.Thread):
     def run(self):
         # First loop : receive inputs until we get a first full set
         while len(self._state_queue) == 0:
-            self.initial_loop(self._socket)
+            self.initial_loop()
 
         # Then start the actual event loop : now we only test for changes
         while True:
-            self.loop(self._socket)
+            self.loop()
 
     @property
     def state(self):

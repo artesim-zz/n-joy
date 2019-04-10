@@ -26,13 +26,13 @@ def controls():
 def initial_loop_recv(input_buffer, control, value):
     event = PhysicalControlEvent(control=control, value=value)
     input_buffer._socket.recv_multipart.return_value = event._serialize_control() + event._serialize_value()
-    input_buffer.initial_loop(input_buffer._socket)
+    input_buffer.initial_loop()
 
 
 def loop_recv(input_buffer, control, value):
     event = PhysicalControlEvent(control=control, value=value)
     input_buffer._socket.recv_multipart.return_value = event._serialize_control() + event._serialize_value()
-    input_buffer.loop(input_buffer._socket)
+    input_buffer.loop()
 
 
 @pytest.mark.ensure_clean_physical_device_cache
