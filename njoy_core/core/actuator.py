@@ -1,5 +1,4 @@
 import threading
-import time
 import zmq
 
 from njoy_core.core.model import VirtualControlEvent
@@ -13,34 +12,19 @@ class Actuator(threading.Thread):
         self._socket = self._ctx.socket(zmq.REQ)
         self._socket.set(zmq.IDENTITY, VirtualControlEvent.mk_identity(virtual_control))
         self._socket.connect(output_endpoint)
-
         self._virtual_control = virtual_control
-        self._input_states = self._init_input_states(virtual_control)
+        self._virtual_control_state, physical_controls = virtual_control.mk_state_processor()
         self._input_buffer = InputBuffer(context=context,
                                          input_endpoint=input_endpoint,
-                                         physical_controls=list(self._input_states.keys()))
+                                         physical_controls=physical_controls)
 
-    def _init_input_states(self, virtual_control):
-        physical_controls = virtual_control.physical_inputs
-        for physical_control in physical_controls:
-            physical_control.processor = lambda _: self._input_states[physical_control]
-        return {c: None for c in physical_controls}
-
-    def _update_inputs(self):
-        input_states = None
-        while input_states is None:
-            input_states = self._input_buffer.state
-            time.sleep(0.0001)  # Wait 100 µs between each read attempt, to give a chance for other threads to run
-
-        for (c, s) in input_states.items():
-            self._input_states[c] = s
-
-    def loop(self, socket):
-        self._update_inputs()
-        VirtualControlEvent(value=self._virtual_control.state).send(socket)
-        VirtualControlEvent.recv(socket)
+    def loop(self):
+        input_states = list(self._input_buffer.state.values())
+        VirtualControlEvent(control=self._virtual_control,
+                            value=self._virtual_control_state(input_states)).send(self._socket)
+        VirtualControlEvent.recv(self._socket)
 
     def run(self):
         self._input_buffer.start()
         while True:
-            self.loop(self._socket)
+            self.loop()

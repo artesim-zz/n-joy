@@ -4,17 +4,17 @@ class EssentialToolboxError(Exception):
 
 class EssentialToolbox:
     @staticmethod
-    def passthrough(control):
-        return control.state
+    def passthrough(ctrl_state):
+        return ctrl_state
 
     @staticmethod
-    def not_(control):
-        return not control.state
+    def not_(ctrl_state):
+        return not ctrl_state
 
     @staticmethod
-    def any(*controls):
-        return any([control.state for control in controls])
+    def any(*ctrl_states):
+        return any(ctrl_states)
 
     @staticmethod
-    def not_any(*controls):
-        return not any([control.state for control in controls])
+    def not_any(*ctrl_states):
+        return not any(ctrl_states)
