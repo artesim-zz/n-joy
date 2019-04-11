@@ -257,11 +257,18 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
 
         if name is not None:
             if name in cls.__NAME_INDEX__:
-                names = cls.__NAME_INDEX__[name]
-                if len(names) > 1:
+                devices = cls.__NAME_INDEX__[name]
+                if len(devices) > 1:
                     raise DeviceAmbiguousNameError(cls, name)
                 else:
-                    return names[0]
+                    device = devices[0]
+
+                    # If we found it by (unique) name despite the fact that a guid was provided, this means we didn't
+                    # know about that guid before hand : update the device before returning it
+                    if guid is not None:
+                        device.guid = guid
+
+                    return device
             else:
                 raise DeviceNameNotFoundError(cls, name)
 
