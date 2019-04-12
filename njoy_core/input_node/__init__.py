@@ -23,6 +23,8 @@ class EmbeddedInputNode(threading.Thread):
 
     def run(self):
         self.handshake()
+        print("Input Node: emitting all initial events")
+        self._hid_event_loop.emit_full_state(self._events_socket)
         print("Input Node: starting event loop")
         while True:
             self._hid_event_loop.loop(self._events_socket)

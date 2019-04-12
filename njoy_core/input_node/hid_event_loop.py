@@ -49,6 +49,19 @@ class HidEventLoop:
     def _button_value(value):
         return value != 0
 
+    def emit_full_state(self, socket):
+        for device in self._devices.values():
+            sdl_device = device['sdl_device']
+            for axis in device['njoy_device'].axes.values():
+                PhysicalControlEvent(control=axis,
+                                     value=sdl_device.get_axis(axis.id)).send(socket)
+            for button in device['njoy_device'].buttons.values():
+                PhysicalControlEvent(control=button,
+                                     value=sdl_device.get_button(button.id)).send(socket)
+            for hat in device['njoy_device'].hats.values():
+                PhysicalControlEvent(control=hat,
+                                     value=sdl_device.get_hat(hat.id)).send(socket)
+
     def loop(self, socket):
         for event in sdl2.ext.get_events():
             if event.type == sdl2.SDL_QUIT:
