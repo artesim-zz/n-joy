@@ -80,6 +80,8 @@ def parse_design(design_file=None):
         # Virtual Buttons
         Button(processor=EssentialToolbox.passthrough,
                inputs=[Button(dev='thr', ctrl=0)]),
+
+        # Flaps
         Button(processor=EssentialToolbox.passthrough,
                inputs=[Button(dev='thr', ctrl=22)]),
         Button(processor=EssentialToolbox.not_any,
@@ -88,7 +90,45 @@ def parse_design(design_file=None):
         Button(processor=EssentialToolbox.passthrough,
                inputs=[Button(dev='thr', ctrl=21)]),
 
+        # SPD
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=6)]),
+        Button(processor=EssentialToolbox.not_any,
+               inputs=[Button(dev='thr', ctrl=6),
+                       Button(dev='thr', ctrl=7)]),
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=7)]),
+
+        # BS
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=8)]),
+        Button(processor=EssentialToolbox.not_any,
+               inputs=[Button(dev='thr', ctrl=8),
+                       Button(dev='thr', ctrl=9)]),
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=9)]),
+
+        # CH
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=10)]),
+        Button(processor=EssentialToolbox.not_any,
+               inputs=[Button(dev='thr', ctrl=10),
+                       Button(dev='thr', ctrl=11)]),
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=11)]),
+
+        # PS
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=12)]),
+        Button(processor=EssentialToolbox.not_any,
+               inputs=[Button(dev='thr', ctrl=12),
+                       Button(dev='thr', ctrl=13)]),
+        Button(processor=EssentialToolbox.passthrough,
+               inputs=[Button(dev='thr', ctrl=13)]),
+
         # Virtual Hats
+        Hat(processor=EssentialToolbox.passthrough,
+            inputs=[Hat(dev='joy', ctrl=0)]),
         Hat(processor=EssentialToolbox.passthrough,
             inputs=[Hat(dev='thr', ctrl=0)])
     ]
