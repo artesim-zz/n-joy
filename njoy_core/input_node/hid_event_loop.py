@@ -56,17 +56,20 @@ class HidEventLoop:
 
             elif event.type == sdl2.SDL_JOYAXISMOTION:
                 device = self._devices[event.jaxis.which]['njoy_device']
-                PhysicalControlEvent(control=device.axes[event.jaxis.axis],
-                                     value=self._axis_value(event.jaxis.value)).send(socket)
+                if event.jaxis.axis in device.axes:
+                    PhysicalControlEvent(control=device.axes[event.jaxis.axis],
+                                         value=self._axis_value(event.jaxis.value)).send(socket)
 
             elif event.type in {sdl2.SDL_JOYBUTTONDOWN, sdl2.SDL_JOYBUTTONUP}:
                 device = self._devices[event.jbutton.which]['njoy_device']
-                PhysicalControlEvent(control=device.buttons[event.jbutton.button],
-                                     value=self._button_value(event.jbutton.state)).send(socket)
+                if event.jbutton.button in device.buttons:
+                    PhysicalControlEvent(control=device.buttons[event.jbutton.button],
+                                         value=self._button_value(event.jbutton.state)).send(socket)
 
             elif event.type == sdl2.SDL_JOYHATMOTION:
                 device = self._devices[event.jhat.which]['njoy_device']
-                PhysicalControlEvent(control=device.hats[event.jhat.hat],
-                                     value=event.jhat.value).send(socket)
+                if event.jhat.hat in device.hats:
+                    PhysicalControlEvent(control=device.hats[event.jhat.hat],
+                                         value=event.jhat.value).send(socket)
 
         time.sleep(self.__LOOP_SLEEP_TIME__)
