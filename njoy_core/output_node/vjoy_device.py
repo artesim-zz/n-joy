@@ -43,11 +43,7 @@ class VJoyDevice(pyvjoy.VJoyDevice):
     def set_button(self, button_id, state, delay=None):
         """Set a given button to On (1 or True) or Off (0 or False)
         button_id is 0-based, internally converted to vjoy 1-based button ID"""
-        def _set_button():
-            super().set_button(1 + button_id, state)
-
-        if delay is None:
-            _set_button()
+        super().set_button(1 + button_id, state)
 
     def pulse_button(self, button_id, state, duration=20, delay=None):
         """Set a given button to 'state', but only for 'duration' milliseconds, and with optional delay

@@ -40,7 +40,7 @@ class AxisFeeder(Feeder):
 class ButtonFeeder(Feeder):
     def _handle_event(self, event):
         self._output_device.set_button(button_id=self._control.id,
-                                       state=event.state)
+                                       state=event.value)
 
 
 class HatFeeder(Feeder):
@@ -56,8 +56,8 @@ class HatFeeder(Feeder):
                            HatState.HAT_CENTER: -1}
 
     def _handle_event(self, event):
-        self._output_device.set_axis(pov_id=self._control.id,
-                                     pov_value=self.__to_continuous_pov[event.value])
+        self._output_device.set_cont_pov(pov_id=self._control.id,
+                                         pov_value=self.__to_continuous_pov[event.value])
 
 
 class VirtualJoystick(threading.Thread):
