@@ -1,8 +1,7 @@
 import collections
 import njoy_core.core.model
 
-collect_ignore = ["njoy_core/core/test_core.py",
-                  "njoy_core/input_node/test_input_node.py"]
+collect_ignore = ["njoy_core/input_node/test_input_node.py"]
 
 
 def pytest_runtest_setup(item):

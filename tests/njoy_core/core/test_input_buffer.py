@@ -13,10 +13,11 @@ def context():
     return zmq.Context()
 
 
+@pytest.mark.ensure_clean_input_node_cache
 @pytest.fixture(scope="module")
 def controls():
     node = InputNode()
-    device = PhysicalDevice(node=node, alias='a', name='n')
+    device = PhysicalDevice(alias='a', name='n')
     node.append(device)
     return {'axis': Axis(dev=device),
             'button': Button(dev=device),
@@ -25,13 +26,13 @@ def controls():
 
 def initial_loop_recv(input_buffer, control, value):
     event = PhysicalControlEvent(control=control, value=value)
-    input_buffer._socket.recv_multipart.return_value = event._serialize_control() + event._serialize_value()
+    input_buffer._socket.recv_multipart.return_value = event._serialize_control() + [event._serialize_value()]
     input_buffer.initial_loop()
 
 
 def loop_recv(input_buffer, control, value):
     event = PhysicalControlEvent(control=control, value=value)
-    input_buffer._socket.recv_multipart.return_value = event._serialize_control() + event._serialize_value()
+    input_buffer._socket.recv_multipart.return_value = event._serialize_control() + [event._serialize_value()]
     input_buffer.loop()
 
 

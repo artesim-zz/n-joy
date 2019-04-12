@@ -69,9 +69,7 @@ class TestActuatorLoop:
         mocker.patch.object(actuator._socket, 'recv_multipart', autospec=True)
         with mock.patch('njoy_core.core.input_buffer.InputBuffer.state', new_callable=mocker.PropertyMock) as state:
             state.return_value = {axis: 0.1}
-            ack = VirtualControlEvent(control=axis, value=None)
-            actuator._socket.recv_multipart.return_value = ack._serialize_control() + ack._serialize_value()
+            actuator._socket.recv_multipart.return_value = [VirtualControlEvent(value=None)._serialize_value()]
             actuator.loop()
-        req = VirtualControlEvent(control=virtual_axis, value=0.1)
-        actuator._socket.send_multipart.assert_called_with(req._serialize_control() + req._serialize_value())
+        actuator._socket.send_multipart.assert_called_with([VirtualControlEvent(value=0.1)._serialize_value()])
 

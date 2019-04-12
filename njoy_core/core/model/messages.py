@@ -88,6 +88,12 @@ class ControlEvent:
         self.control = control
         self.value = value
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.control == other.control and self.value == other.value
+        else:
+            return NotImplemented
+
     @classmethod
     def mk_identity(cls, control):
         if not isinstance(control, AbstractControl):
@@ -120,22 +126,24 @@ class ControlEvent:
 
     def _serialize_value(self):
         if self.value is None:
-            return [b'']
+            return b''
 
         if isinstance(self.control, Axis) or isinstance(self.value, float):
-            return [self.__AXIS_VALUE_PACKER__.pack(self.value)]
+            return self.__AXIS_VALUE_PACKER__.pack(self.value)
 
         elif isinstance(self.control, Button) or isinstance(self.value, bool):
-            return [self.__BUTTON_VALUE_PACKER__.pack(self.value)]
+            return self.__BUTTON_VALUE_PACKER__.pack(self.value)
 
         elif isinstance(self.control, Hat) or (isinstance(self.value, int) and (0x00 <= self.value <= 0x0F)):
-            return [self.__HAT_VALUE_PACKER__.pack(self.value | 0x80)]
+            return self.__HAT_VALUE_PACKER__.pack(self.value | 0x80)
 
         else:
             raise MessageError("Cannot serialize value : {}".format(self.value))
 
     def send(self, socket):
-        socket.send_multipart(self._serialize_control() + self._serialize_value())
+        msg_parts = self._serialize_control()
+        msg_parts.append(self._serialize_value())
+        socket.send_multipart(msg_parts)
 
     @classmethod
     def _control_class_from_value(cls, value):
@@ -158,32 +166,34 @@ class ControlEvent:
         return ctrl_grp[ctrl_id]
 
     @classmethod
-    def _deserialize_value(cls, value_frames):
-        if value_frames[0] == b'':
+    def _deserialize_value(cls, value_frame):
+        if value_frame == b'':
             return None  # Single-Frame 'Ready' signal
 
-        elif len(value_frames[0]) == 8:
-            unpacked = cls.__AXIS_VALUE_PACKER__.unpack(value_frames[0])
+        elif len(value_frame) == 8:
+            unpacked = cls.__AXIS_VALUE_PACKER__.unpack(value_frame)
             return unpacked[0]
 
-        elif len(value_frames[0]) == 1 and value_frames[0][0] & 0x80 == 0x00:
-            unpacked = cls.__BUTTON_VALUE_PACKER__.unpack(value_frames[0])
+        elif len(value_frame) == 1 and value_frame[0] & 0x80 == 0x00:
+            unpacked = cls.__BUTTON_VALUE_PACKER__.unpack(value_frame)
             return unpacked[0]
 
-        elif len(value_frames[0]) == 1 and value_frames[0][0] & 0x80 == 0x80:
-            unpacked = cls.__HAT_VALUE_PACKER__.unpack(value_frames[0])
+        elif len(value_frame) == 1 and value_frame[0] & 0x80 == 0x80:
+            unpacked = cls.__HAT_VALUE_PACKER__.unpack(value_frame)
             return unpacked[0] & 0x0F
 
         else:
-            raise MessageError("Cannot deserialize value frames : {}".format(value_frames))
+            raise MessageError("Cannot deserialize value frame : {}".format(value_frame))
 
     @classmethod
     def _deserialize(cls, frames):
-        if len(frames[0]) == 2 and frames[1] == b'':
+        if len(frames) == 3 and len(frames[0]) == 2 and frames[1] == b'':
             return {'control': cls._deserialize_control(frames[0]),
-                    'value': cls._deserialize_value(frames[2:])}
+                    'value': cls._deserialize_value(frames[2])}
+        elif len(frames) == 1:
+            return {'value': cls._deserialize_value(frames[0])}
         else:
-            return {'value': cls._deserialize_value(frames)}
+            raise MessageError("Cannot deserialize frames : {}".format(frames))
 
     @classmethod
     def recv(cls, socket):
