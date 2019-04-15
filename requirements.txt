@@ -4,3 +4,5 @@ pyvjoy
 lark-parser>=0.6.7
 pytest>=4.3.1
 pytest-mock>=1.10
+'yappi>=1.0
+snakeviz>=2.0.0

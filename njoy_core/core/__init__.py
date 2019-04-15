@@ -1,4 +1,6 @@
 import threading
+import time
+import yappi
 import zmq
 
 import njoy_core.core.parsers.design_parser
@@ -19,6 +21,8 @@ class Core(threading.Thread):
     __INTERNAL_MUX_OUT__ = 'inproc://core/internal/mux_out'
 
     def __init__(self, *, context, input_events, output_events, requests):
+        yappi.start()
+
         super().__init__()
 
         self._ctx = context
@@ -33,6 +37,12 @@ class Core(threading.Thread):
 
         self._requests = self._ctx.socket(zmq.REP)
         self._requests.bind(requests)
+
+    def yappi_dump(self):
+        time.sleep(5)
+        func_stats = yappi.get_func_stats()
+        func_stats.save('callgrind.out', type='callgrind')
+        func_stats.save('yappi.ystats')
 
     @staticmethod
     def _register_input_node(available_devices):
@@ -104,7 +114,7 @@ class Core(threading.Thread):
                 for control in parsed_design['controls']]
 
     def run(self):
-        threads = [self._mux_in, self._mux_out]
+        threads = [self._mux_in, self._mux_out, threading.Thread(target=self.yappi_dump)]
         threads.extend(self._handshake())
 
         for t in threads:

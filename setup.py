@@ -5,7 +5,7 @@ setup(
     version='0.4.0',
     packages=['njoy_core'],
     requires=['pyzmq>=18', 'PySDL2>=0.9.6', 'pyvjoy', 'lark-parser>=0.6.7'],
-    tests_requires=['pytest>=4.3.1', 'pytest-mock>=1.10'],
+    tests_requires=['pytest>=4.3.1', 'pytest-mock>=1.10', 'yappi>=1.0', 'snakeviz>=2.0.0'],
     url='http://www.n-joy.io/',
     license='Creative Commons Attribution-ShareAlike 4.0 International (https://creativecommons.org/licenses/by-sa/4.0/)',
     author='Artesim',
