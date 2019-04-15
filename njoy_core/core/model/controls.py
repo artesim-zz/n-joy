@@ -43,6 +43,10 @@ class ControlInvalidDeviceError(ControlError):
         self.message = "dev must be a Device instance, or an alias of one"
 
 
+class ControlProgrammingError(ControlError):
+    pass
+
+
 class AutoRegisteringControl(type):
     __REGISTER_METHOD__ = NotImplemented
 
@@ -79,8 +83,8 @@ class AbstractControl(metaclass=AutoRegisteringControl):
     def __init__(self, *, processor=None, inputs=None, **_kwargs):
         self.dev = None  # Automatically set by the device it is assigned to
         self.id = None  # Automatically set by the device it is assigned to
-        self._processor = processor
-        self._input_controls = inputs or list()
+        self.processor = processor
+        self.input_controls = inputs
 
     def __repr__(self):
         if self.is_assigned:
@@ -95,13 +99,13 @@ class AbstractControl(metaclass=AutoRegisteringControl):
     def __hash__(self):
         if self.dev is None:
             return hash((self.__class__.__name__,
-                         hash(self._input_controls),
-                         id(self._processor),
+                         hash(self.input_controls),
+                         id(self.processor),
                          self.id))
         elif self.dev.node is None:
             return hash((self.__class__.__name__,
-                         hash(self._input_controls),
-                         id(self._processor),
+                         hash(self.input_controls),
+                         id(self.processor),
                          self.dev.id,
                          self.id))
         else:
@@ -117,33 +121,6 @@ class AbstractControl(metaclass=AutoRegisteringControl):
     @property
     def is_physical_control(self):
         return self.dev is not None and isinstance(self.dev, PhysicalDevice)
-
-    def mk_state_processor(self):
-        # TODO: break down this description
-        """Builds a function accepting an InputBuffer state, and returning a state.
-        The built function recursively calls state processors generated from its input controls.
-        In addition to the state processor function, return a set of all the required physical input controls.
-        The mk_state_processor function is called once at design-parsing time by the Core, on each
-        top-level virtual control.
-        The generated function and the set of physical controls is used by the Actuator at runtime, to compute the
-        new state of the corresponding virtual control when one of the physical controls has changed.
-        The generated function returns the new computed state of the corresponding virtual control"""
-        physical_controls = set()
-        child_processors = list()
-        for input_control in self._input_controls:
-            if input_control.is_physical_control:
-                physical_controls.add(input_control)
-                child_processors.append(lambda input_states: input_states[0])
-            else:
-                child_processor, child_physical_controls = input_control.mk_state_processor()
-                physical_controls.update(child_physical_controls)
-                child_processors.append(child_processor)
-
-        def state_processor(input_states):
-            child_states = [cp(input_states) for cp in child_processors]
-            return self._processor(*child_states)
-
-        return state_processor, physical_controls
 
 
 class Axis(AbstractControl):

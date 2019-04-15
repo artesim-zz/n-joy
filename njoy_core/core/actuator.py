@@ -12,14 +12,13 @@ class Actuator(threading.Thread):
         self._socket = self._ctx.socket(zmq.REQ)
         self._socket.set(zmq.IDENTITY, VirtualControlEvent.mk_identity(virtual_control))
         self._socket.connect(output_endpoint)
-        self._virtual_control_state, physical_controls = virtual_control.mk_state_processor()
+        self._virtual_control = virtual_control
         self._input_buffer = InputBuffer(context=context,
                                          input_endpoint=input_endpoint,
-                                         physical_controls=physical_controls)
+                                         physical_controls=virtual_control.input_controls)
 
     def loop(self):
-        input_states = list(self._input_buffer.state.values())
-        VirtualControlEvent(value=self._virtual_control_state(input_states)).send(self._socket)
+        VirtualControlEvent(value=self._virtual_control.processor(self._input_buffer.state)).send(self._socket)
         VirtualControlEvent.recv(self._socket)
 
     def run(self):

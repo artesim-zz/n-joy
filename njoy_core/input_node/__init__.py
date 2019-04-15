@@ -18,12 +18,10 @@ class EmbeddedInputNode(threading.Thread):
 
         self._hid_event_loop = njoy_core.input_node.hid_event_loop.HidEventLoop()
 
-    def handshake(self):
-        self._hid_event_loop.handshake(self._requests_socket)
-
     def run(self):
-        self.handshake()
-        print("Input Node: emitting all initial events")
+        print("Input Node: initial handshake")
+        self._hid_event_loop.handshake(self._requests_socket)
+        print("Input Node: emitting initial state")
         self._hid_event_loop.emit_full_state(self._events_socket)
         print("Input Node: starting event loop")
         while True:
