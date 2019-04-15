@@ -237,7 +237,7 @@ class TestPhysicalDeviceLookup:
 
     def test_case_11(self, input_node):
         """Finally at run time, the PhysicalDevices will be retrieved node_id/device_id from the event messages."""
-        node = InputNode.find(node_id=input_node) if isinstance(input_node, int) else input_node
+        node = InputNode.find(node=input_node) if isinstance(input_node, int) else input_node
         node.append(PhysicalDevice(alias='alias_1', guid='guid_1'))
         b = PhysicalDevice(alias='alias_2', guid='guid_2')
         node.append(b)

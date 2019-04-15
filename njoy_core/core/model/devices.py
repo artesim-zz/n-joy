@@ -88,7 +88,7 @@ class AutoRegisteringDevice(type):
     def _find_node(cls, node, raise_error=False):
         if isinstance(node, int):
             try:
-                return cls.__NODE_CLASS__.find(node_id=node)
+                return cls.__NODE_CLASS__.find(node=node)
             except NodeNotFoundError:
                 raise DeviceInvalidNodeError(cls)
         elif isinstance(node, cls.__NODE_CLASS__):
@@ -136,32 +136,44 @@ class AbstractDevice:
     def is_assigned(self):
         return self.node is not None and self.id is not None
 
-    def register_axis(self, axis, *, ctrl_id=None):
-        if ctrl_id is not None and ctrl_id in self.axes:
-            raise DeviceRegisterControlError(axis, ctrl_id, self)
+    def register_axis(self, axis, *, ctrl=None):
+        if ctrl is not None and ctrl in self.axes:
+            if self.axes[ctrl].is_physical_control:
+                return self.axes[ctrl]
+            else:
+                raise DeviceRegisterControlError(axis, ctrl, self)
         if len(self.axes) == self.__MAX_NB_AXIS__:
             raise DeviceOverflowError(axis, self, self.__MAX_NB_AXIS__)
         setattr(axis, 'dev', self)
-        setattr(axis, 'id', ctrl_id or len(self.axes))
+        setattr(axis, 'id', ctrl or len(self.axes))
         self.axes[axis.id] = axis
+        return axis
 
-    def register_button(self, button, *, ctrl_id=None):
-        if ctrl_id is not None and ctrl_id in self.buttons:
-            raise DeviceRegisterControlError(button, ctrl_id, self)
+    def register_button(self, button, *, ctrl=None):
+        if ctrl is not None and ctrl in self.buttons:
+            if self.buttons[ctrl].is_physical_control:
+                return self.buttons[ctrl]
+            else:
+                raise DeviceRegisterControlError(button, ctrl, self)
         if len(self.buttons) == self.__MAX_NB_BUTTONS__:
             raise DeviceOverflowError(button, self, self.__MAX_NB_BUTTONS__)
         setattr(button, 'dev', self)
-        setattr(button, 'id', ctrl_id or len(self.buttons))
+        setattr(button, 'id', ctrl or len(self.buttons))
         self.buttons[button.id] = button
+        return button
 
-    def register_hat(self, hat, *, ctrl_id=None):
-        if ctrl_id is not None and ctrl_id in self.hats:
-            raise DeviceRegisterControlError(hat, ctrl_id, self)
+    def register_hat(self, hat, *, ctrl=None):
+        if ctrl is not None and ctrl in self.hats:
+            if self.hats[ctrl].is_physical_control:
+                return self.hats[ctrl]
+            else:
+                raise DeviceRegisterControlError(hat, ctrl, self)
         if len(self.hats) == self.__MAX_NB_HATS__:
             raise DeviceOverflowError(hat, self, self.__MAX_NB_HATS__)
         setattr(hat, 'dev', self)
-        setattr(hat, 'id', ctrl_id or len(self.hats))
+        setattr(hat, 'id', ctrl or len(self.hats))
         self.hats[hat.id] = hat
+        return hat
 
 
 class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):

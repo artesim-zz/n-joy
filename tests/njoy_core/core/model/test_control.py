@@ -82,17 +82,23 @@ class TestInstantiation:
 
     def test_case_6(self, device, control_cls):
         """If 'ctrl_id' is also specified, the device will try to register the new control with this id (if available).
+        If it already exists but it's a Physical Control, then return it instead of raising an error.
         """
         _ = control_cls(dev=device)
+        c = control_cls(dev=device)
         _ = control_cls(dev=device)
-        _ = control_cls(dev=device)
-        with pytest.raises(DeviceRegisterControlError):
-            _ = control_cls(dev=device, ctrl_id=1)
+
+        if isinstance(device, PhysicalDevice) or isinstance(device, str):
+            control = control_cls(dev=device, ctrl=1)
+            assert control is c
+        else:
+            with pytest.raises(DeviceRegisterControlError):
+                _ = control_cls(dev=device, ctrl=1)
 
     def test_case_7(self, device, control_cls):
         """If 'ctrl_id' is also specified, the device will try to register the new control with this id (if available).
         """
-        control = control_cls(dev=device, ctrl_id=3)
+        control = control_cls(dev=device, ctrl=3)
         assert control.is_assigned is True
         assert control.id == 3
 

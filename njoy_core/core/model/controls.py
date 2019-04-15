@@ -17,7 +17,8 @@ At instantiation, if neither 'dev' nor 'ctrl' is specified, a new unassigned con
 If 'dev' is specified, a new control instance is created and registered to the corresponding device, and the control
 id is automatically assigned. 'dev' must be either an existing device instance, or an alias to one.
 
-If 'ctrl_id' is also specified, the device will try to register the new control with this id (if available).
+If 'ctrl_id' is also specified, the device will try to register the new control with this id (if available). If it
+already exists but it's a Physical Control, then return it instead of raising an error.
 
 Providing 'ctrl_id' without 'dev' doesn't make sense : the behavior is unspecified, but it will probably result in an
 unassigned control, completely ignoring 'ctrl_id'.
@@ -45,7 +46,7 @@ class ControlInvalidDeviceError(ControlError):
 class AutoRegisteringControl(type):
     __REGISTER_METHOD__ = NotImplemented
 
-    def __call__(cls, *args, dev=None, ctrl_id=None, **kwargs):
+    def __call__(cls, *args, dev=None, ctrl=None, **kwargs):
         # First create the control
         control = super().__call__(*args, **kwargs)
 
@@ -53,10 +54,10 @@ class AutoRegisteringControl(type):
         device_instance = cls._find_device(dev)
         if device_instance is not None:
             register_method = getattr(device_instance, cls.__REGISTER_METHOD__)
-            if ctrl_id is None:
-                register_method(control)
+            if ctrl is None:
+                control = register_method(control)
             else:
-                register_method(control, ctrl_id=ctrl_id)
+                control = register_method(control, ctrl=ctrl)
 
         return control
 

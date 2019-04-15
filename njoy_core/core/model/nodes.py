@@ -33,8 +33,8 @@ class NodeDeviceOverflowError(NodeError):
 
 
 class NodeNotFoundError(NodeError):
-    def __init__(self, node_class, node_id):
-        self.message = "No existing {} with id {}".format(node_class.__name__, node_id)
+    def __init__(self, node_class, node):
+        self.message = "No existing {} with id {}".format(node_class.__name__, node)
 
 
 class AutoIndexingNode(abc.ABCMeta):
@@ -55,11 +55,11 @@ class AbstractNode(collections.MutableSequence, metaclass=AutoIndexingNode):
     __MAX_DEVICES__ = 16
 
     @classmethod
-    def find(cls, *, node_id):
-        if node_id < len(cls.__NODES__[cls]):
-            return cls.__NODES__[cls][node_id]
+    def find(cls, *, node):
+        if node < len(cls.__NODES__[cls]):
+            return cls.__NODES__[cls][node]
         else:
-            raise NodeNotFoundError(cls, node_id)
+            raise NodeNotFoundError(cls, node)
 
     def __init__(self):
         self._devices = list()

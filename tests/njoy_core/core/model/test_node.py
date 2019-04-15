@@ -54,12 +54,12 @@ class TestLookup:
         _ = node_cls()
         b = node_cls()
         _ = node_cls()
-        msg_node = node_cls.find(node_id=1)
+        msg_node = node_cls.find(node=1)
         assert msg_node is b
 
     def test_case_2(self, node_cls):
         with pytest.raises(NodeNotFoundError):
-            node_cls.find(node_id=0)
+            node_cls.find(node=0)
 
 
 @pytest.mark.ensure_clean_input_node_cache
