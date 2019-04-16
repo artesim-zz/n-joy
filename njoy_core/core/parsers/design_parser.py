@@ -60,26 +60,30 @@ def parse_design(design_file=None):
 
     controls = [
         # Virtual Axes
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # JOYX
              inputs=[Axis(dev='joy', ctrl=0)]),
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # JOYY
              inputs=[Axis(dev='joy', ctrl=1)]),
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # SCX
              inputs=[Axis(dev='thr', ctrl=0)]),
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # SCY
              inputs=[Axis(dev='thr', ctrl=1)]),
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # THR_RIGHT
              inputs=[Axis(dev='thr', ctrl=2)]),
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # THR_LEFT
+             inputs=[Axis(dev='thr', ctrl=3)]),
+        Axis(processor=EssentialToolbox.passthrough,  # THR_FC
+             inputs=[Axis(dev='thr', ctrl=4)]),
+        Axis(processor=EssentialToolbox.passthrough,  # TOE LEFT
              inputs=[Axis(dev='pdl', ctrl=0)]),
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # TOE RIGHT
              inputs=[Axis(dev='pdl', ctrl=1)]),
-        Axis(processor=EssentialToolbox.passthrough,
+        Axis(processor=EssentialToolbox.passthrough,  # RUDDER
              inputs=[Axis(dev='pdl', ctrl=2)]),
 
         # Virtual Buttons
         Button(processor=EssentialToolbox.passthrough,
-               inputs=[Button(dev='thr', ctrl=0)]),
+               inputs=[Button(dev='thr', ctrl=0)]),  # SC
 
         # Flaps
         Button(processor=EssentialToolbox.passthrough,
