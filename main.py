@@ -1,21 +1,33 @@
-import zmq.green as zmq
+import zmq
 
-from njoy_core.combined_joysticks import CombinedJoystick
-from njoy_core.hid_event_loop import HidEventLoop
+from njoy_core.input_node import EmbeddedInputNode
+from njoy_core.output_node import EmbeddedOutputNode
+from njoy_core.core import Core
 
 
 def main():
     ctx = zmq.Context()
 
-    hid_event_loop = HidEventLoop(context=ctx,
-                                  events_endpoint="inproc://hid_event_loop",
-                                  requests_endpoint="inproc://hid_event_loop_requests")
+    core = Core(context=ctx,
+                input_events="inproc://input_events",
+                output_events="inproc://output_events",
+                requests="inproc://requests")
 
-    ctrl_pool = CombinedJoystick(hid_event_loop)
+    input_node = EmbeddedInputNode(context=ctx,
+                                   events_endpoint="inproc://input_events",
+                                   requests_endpoint="inproc://requests")
 
-    hid_event_loop.start()
-    ctrl_pool.start()
-    ctrl_pool.join()
+    output_node = EmbeddedOutputNode(context=ctx,
+                                     events_endpoint="inproc://output_events",
+                                     requests_endpoint="inproc://requests")
+
+    core.start()
+    input_node.start()
+    output_node.start()
+
+    core.join()
+    input_node.join()
+    output_node.join()
 
 
 if __name__ == "__main__":

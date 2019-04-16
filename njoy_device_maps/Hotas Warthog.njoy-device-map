@@ -1,0 +1,130 @@
+nJoyDeviceMap "Joystick - HOTAS Warthog":
+    # Axis
+    axis 0           => JOYX, JOY_X
+    axis 1           => JOYY, JOY_Y
+
+    # Hats
+    hat 0            => H1
+    hat 0 up         => H1U,  H1_UP
+    hat 0 up-right   => H1UR, H1_UP_RIGHT
+    hat 0 right      => H1R,  H1_RIGHT
+    hat 0 down-right => H1DR, H1_DOWN_RIGHT
+    hat 0 down       => H1D,  H1_DOWN
+    hat 0 down-left  => H1DL, H1_DOWN_LEFT
+    hat 0 left       => H1L,  H1_LEFT
+    hat 0 up-left    => H1UL, H1_UP_LEFT
+
+    # Buttons
+    button 0         => TG1
+    button 1         => S2
+    button 2         => S3
+    button 3         => S4
+    button 4         => S1
+    button 5         => TG2
+
+    # Pseudo-hats - At the HID level, each really is a set of buttons actually, not real "hats"
+    button 6         => H2U, H2_UP
+    button 7         => H2R, H2_RIGHT
+    button 8         => H2D, H2_DOWN
+    button 9         => H2L, H2_LEFT
+
+    button 10        => H3U, H3_UP
+    button 11        => H3R, H3_RIGHT
+    button 12        => H3D, H3_DOWN
+    button 13        => H3L, H3_LEFT
+
+    button 14        => H4U, H4_UP
+    button 15        => H4R, H4_RIGHT
+    button 16        => H4D, H4_DOWN
+    button 17        => H4L, H4_LEFT
+    button 18        => H4P, H4_PRESSED
+
+nJoyDeviceMap "Throttle - HOTAS Warthog":
+    # Axis
+    axis 0                => SCX, SC_X
+    axis 1                => SCY, SC_Y
+    axis 2                => THR_RIGHT
+    axis 3                => THR_LEFT
+    axis 4                => THR_FC
+
+    # Hats
+    hat 0                 => CS
+    hat 0 up              => CSU,  CS_UP
+    hat 0 up-right        => CSUR, CS_UP_RIGHT
+    hat 0 right           => CSR,  CS_RIGHT
+    hat 0 down-right      => CSDR, CS_DOWN_RIGHT
+    hat 0 down            => CSD,  CS_DOWN
+    hat 0 down-left       => CSDL, CS_DOWN_LEFT
+    hat 0 left            => CSL,  CS_LEFT
+    hat 0 up-left         => CSUL, CS_UP_LEFT
+
+    # Buttons
+    button 0              => SC
+
+    # Pseudo-hat - At the HID level, it really is a set of buttons actually, not a real "hat"
+    button 1              => MSP, MS_PRESSED
+    button 2              => MSU, MS_UP
+    button 3              => MSR, MS_RIGHT
+    button 4              => MSD, MS_DOWN
+    button 5              => MSL, MS_LEFT
+
+    button 6              => SPDF, SPD_FORWARD
+    button 7              => SPDB, SPD_BACKWARD
+    neither buttons 6 7   => SPDM, SPD_MIDDLE
+
+    button 8              => BSF, BS_FORWARD
+    button 9              => BSB, BS_BACKWARD
+    neither buttons 8 9   => BSM, BS_MIDDLE
+
+    button 10             => CHF, CH_FORWARD
+    button 11             => CHB, CH_BACKWARD
+    neither buttons 10 11 => CHM, CH_MIDDLE
+
+    button 12             => PSF, PS_FORWARD
+    button 13             => PSB, PS_BACKWARD
+    neither buttons 12 13 => PSM, PS_MIDDLE
+
+    button 14             => LTB
+
+    button 15             => EFLNORM, FUEL_FLOW_LEFT_NORMAL
+    not button 15         => EFLOVER, FUEL_FLOW_LEFT_OVERRIDE
+
+    button 16             => EFRNORM, FUEL_FLOW_RIGHT_NORMAL
+    not button 16         => EFROVER, FUEL_FLOW_RIGHT_OVERRIDE
+
+    button 17             => EOLMOTOR, ENG_OPER_LEFT_MOTOR
+    button 30             => EOLIGN,   ENG_OPER_LEFT_IGN
+    neither buttons 17 30 => EOLNORM,  ENG_OPER_LEFT_NORMAL
+
+    button 18             => EORMOTOR, ENG_OPER_RIGHT_MOTOR
+    button 31             => EORIGN,   ENG_OPER_RIGHT_IGN
+    neither buttons 18 31 => EORNORM,  ENG_OPER_RIGHT_NORMAL
+
+    button 19             => APUON,  APU_START
+    not button 19         => APUOFF, APU_OFF
+
+    button 20             => LDGH, LDG_GEAR_WARN_SILENCE
+
+    button 21             => FLAPU, FLAPS_UP
+    button 22             => FLAPD, FLAPS_DOWN
+    neither buttons 21 22 => FLAPM, FLAPS_MIDDLE
+
+    button 23             => EACON,  EAC_ARM
+    not button 23         => EACOFF, EAC_OFF
+
+    button 24             => RDRNRM, RDR_ALTM_NRM
+    not button 24         => RDRDIS, RDR_ALTM_DIS
+
+    # The Thrustmaster documentation mentions an APDIS state : at design time this button was supposed to be a
+    # spring-loaded switch button that could be maintained in the pressed position, until it was pressed again
+    # to release it.
+    # It seems that this was abandoned at production time, and it's now a classic push button.
+    button 25             => APENG, AP_ENG_DIS, AP_TOGGLE
+
+    button 26             => APPAT, AP_PATH
+    button 27             => APALT, AP_ALT
+    neither buttons 26 27 => APAH,  AP_ALT_HDG
+
+    # Those two buttons are hidden : they're pressed using the main throttles, by pulling them all the way back to idle.
+    button 28             => IDLERON, THR_RIGHT_IDLE
+    button 29             => IDLELON, THR_LEFT_IDLE
