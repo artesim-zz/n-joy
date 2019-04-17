@@ -1,3 +1,6 @@
+"""
+njoy_core.core.model.devices module : defines PhysicalDevice and VirtualDevice
+"""
 import collections
 
 from .nodes import InputNode, OutputNode, NodeNotFoundError
@@ -9,65 +12,66 @@ class DeviceError(Exception):
 
 class DeviceInvalidNodeError(DeviceError):
     def __init__(self, device_class):
-        self.message = "The provided Node must be either an {}, " \
-                       "or the id of one".format(device_class.__NODE_CLASS__.__name__)
+        super().__init__("The provided Node must be either an {}, "
+                         "or the id of one".format(device_class.__NODE_CLASS__.__name__))
 
 
 class DeviceNotFoundError(DeviceError):
     def __init__(self, device_class, dev, node):
-        self.message = "No existing {} with id {} in {}".format(device_class.__name__, dev, node)
+        super().__init__("No existing {} with id {} in {}".format(device_class.__name__, dev, node))
 
 
 class DeviceInvalidParamsError(DeviceError):
     def __init__(self):
-        self.message = "Invalid params : must provided an alias, and either a guid or a name (or both)."
+        super().__init__("Invalid params : must provided an alias, and either a guid or a name (or both).")
 
 
 class DeviceAliasNotFoundError(DeviceError):
     def __init__(self, device_class, alias):
-        self.message = "No existing {} with alias {}".format(device_class.__name__, alias)
+        super().__init__("No existing {} with alias {}".format(device_class.__name__, alias))
 
 
 class DeviceGuidNotFoundError(DeviceError):
     def __init__(self, device_class, guid):
-        self.message = "No existing {} with GUID {}".format(device_class.__name__, guid)
+        super().__init__("No existing {} with GUID {}".format(device_class.__name__, guid))
 
 
 class DeviceNameNotFoundError(DeviceError):
     def __init__(self, device_class, name):
-        self.message = "No existing {} with name {}".format(device_class.__name__, name)
+        super().__init__("No existing {} with name {}".format(device_class.__name__, name))
 
 
 class DeviceAmbiguousNameError(DeviceError):
     def __init__(self, device_class, name):
-        self.message = "Found several {} with name {}, please also provide a GUID".format(device_class.__name__, name)
+        super().__init__("Found several {} with name {},"
+                         "please also provide a GUID".format(device_class.__name__, name))
 
 
 class DeviceInvalidLookupError(DeviceError):
     def __init__(self):
-        self.message = "Invalid lookup : must provided either a (node, dev) couple, an alias, a guid or a name."
+        super().__init__("Invalid lookup : must provided either a (node, dev) couple, an alias, a guid or a name.")
 
 
 class DeviceDuplicateAliasError(DeviceError):
     def __init__(self, device_class, alias):
-        self.message = "We already have a {} with the alias {}".format(device_class.__name__, alias)
+        super().__init__("We already have a {} with the alias {}".format(device_class.__name__, alias))
 
 
 class DeviceDuplicateGuidError(DeviceError):
     def __init__(self, device_class, guid):
-        self.message = "We already have a {} with the GUID {}".format(device_class.__name__, guid)
+        super().__init__("We already have a {} with the GUID {}".format(device_class.__name__, guid))
 
 
 class DeviceOverflowError(DeviceError):
     def __init__(self, control, device, limit):
-        self.message = "Reached max number of {} for {} (max {})".format(control.__class__.__name__, device, limit)
+        super().__init__("Reached max number of {} for {} (max {})".format(control.__class__.__name__, device, limit))
 
 
 class DeviceRegisterControlError(DeviceError):
     def __init__(self, control, ctrl_id, device):
-        self.message = "Couldn't register the {} with id {}, {} already has one.".format(control.__class__.__name__,
-                                                                                         ctrl_id,
-                                                                                         device)
+        super().__init__("Couldn't register the {} with id {}, {} already has one.".format(control.__class__.__name__,
+                                                                                           ctrl_id,
+                                                                                           device))
 
 
 class AutoRegisteringDevice(type):
@@ -88,7 +92,7 @@ class AutoRegisteringDevice(type):
     def _find_node(cls, node, raise_error=False):
         if isinstance(node, int):
             try:
-                return cls.__NODE_CLASS__.find(node=node)
+                return cls.__NODE_CLASS__.find(node=node)  # pylint: disable=no-member
             except NodeNotFoundError:
                 raise DeviceInvalidNodeError(cls)
         elif isinstance(node, cls.__NODE_CLASS__):
@@ -102,21 +106,21 @@ class AutoRegisteringDevice(type):
         node_instance = cls._find_node(node, raise_error=True)
         if dev < len(node_instance):
             return node_instance[dev]
-        else:
-            raise DeviceNotFoundError(cls, dev, node_instance)
+        raise DeviceNotFoundError(cls, dev, node_instance)
 
     def find(cls, *, node, dev):
         return cls._find_device_by_id(node=node, dev=dev)
 
 
 class AbstractDevice:
+    """Abstract base class for PhysicalDevice and VirtualDevice"""
     __MAX_NB_AXIS__ = 8
     __MAX_NB_BUTTONS__ = 128
     __MAX_NB_HATS__ = 4
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):  # pylint: disable=unused-argument
         self.node = None  # Automatically set by the node it is assigned to
-        self.id = None  # Automatically set by the node it is assigned to
+        self.id = None  # Automatically set by the node it is assigned to # pylint: disable=invalid-name
         self.axes = dict()
         self.buttons = dict()
         self.hats = dict()
@@ -126,8 +130,7 @@ class AbstractDevice:
             return '<{} /{:02d}/{:02d}>'.format(self.__class__.__name__,
                                                 self.node.id,
                                                 self.id)
-        else:
-            return '<Unassigned {}>'.format(self.__class__.__name__)
+        return '<Unassigned {}>'.format(self.__class__.__name__)
 
     def __hash__(self):
         return hash((self.node.id if self.node is not None else None, self.id))
@@ -140,10 +143,11 @@ class AbstractDevice:
         if ctrl is not None and ctrl in self.axes:
             if self.axes[ctrl].is_physical_control:
                 return self.axes[ctrl]
-            else:
-                raise DeviceRegisterControlError(axis, ctrl, self)
+            raise DeviceRegisterControlError(axis, ctrl, self)
+
         if len(self.axes) == self.__MAX_NB_AXIS__:
             raise DeviceOverflowError(axis, self, self.__MAX_NB_AXIS__)
+
         setattr(axis, 'dev', self)
         setattr(axis, 'id', ctrl or len(self.axes))
         self.axes[axis.id] = axis
@@ -153,10 +157,11 @@ class AbstractDevice:
         if ctrl is not None and ctrl in self.buttons:
             if self.buttons[ctrl].is_physical_control:
                 return self.buttons[ctrl]
-            else:
-                raise DeviceRegisterControlError(button, ctrl, self)
+            raise DeviceRegisterControlError(button, ctrl, self)
+
         if len(self.buttons) == self.__MAX_NB_BUTTONS__:
             raise DeviceOverflowError(button, self, self.__MAX_NB_BUTTONS__)
+
         setattr(button, 'dev', self)
         setattr(button, 'id', ctrl or len(self.buttons))
         self.buttons[button.id] = button
@@ -166,10 +171,11 @@ class AbstractDevice:
         if ctrl is not None and ctrl in self.hats:
             if self.hats[ctrl].is_physical_control:
                 return self.hats[ctrl]
-            else:
-                raise DeviceRegisterControlError(hat, ctrl, self)
+            raise DeviceRegisterControlError(hat, ctrl, self)
+
         if len(self.hats) == self.__MAX_NB_HATS__:
             raise DeviceOverflowError(hat, self, self.__MAX_NB_HATS__)
+
         setattr(hat, 'dev', self)
         setattr(hat, 'id', ctrl or len(self.hats))
         self.hats[hat.id] = hat
@@ -192,6 +198,8 @@ class VirtualDevice(AbstractDevice, metaclass=AutoRegisteringDevice):
 
 
 class AutoRegisteringPhysicalDevice(AutoRegisteringDevice):
+    """Specialization of the AutoRegisteringDevice metaclass for PhysicalDevices.
+    Ensures either an alias, guid or name is provided."""
     def __call__(cls, *args, alias=None, guid=None, name=None, **kwargs):
         if alias is None or (guid is None and name is None):
             raise DeviceInvalidParamsError()
@@ -225,6 +233,7 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
         self.name = name
 
     def __setattr__(self, key, value):
+        """Perform some consistency checks while setting the alias, guid or name, and update the indexes."""
         if key == 'alias' and value is not None:
             if value in self.__ALIAS_INDEX__:
                 raise DeviceDuplicateAliasError(self.__class__, value)
@@ -236,8 +245,8 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
             self.__GUID_INDEX__[value] = self
 
         elif key == 'name' and value is not None:
-            if len(self.__NAME_INDEX__[value]) > 0 and \
-                    (self.guid is None or any([d.guid is None for d in self.__NAME_INDEX__[value]])):
+            if self.__NAME_INDEX__[value] and (self.guid is None or
+                                               any([d.guid is None for d in self.__NAME_INDEX__[value]])):
                 raise DeviceAmbiguousNameError(self.__class__, value)
             self.__NAME_INDEX__[value].append(self)
 
@@ -252,19 +261,20 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
 
     @classmethod
     def find(cls, *, node=None, dev=None, alias=None, guid=None, name=None):
+        """Find an existing device instance either by (in order) node/dev couple, alias, guid or name."""
         if node is not None and dev is not None:
             return cls._find_device_by_id(node=node, dev=dev)
 
         if alias is not None:
             if alias in cls.__ALIAS_INDEX__:
                 return cls.__ALIAS_INDEX__[alias]
-            elif guid is None and name is None:
+            if guid is None and name is None:
                 raise DeviceAliasNotFoundError(cls, alias)
 
         if guid is not None:
             if guid in cls.__GUID_INDEX__:
                 return cls.__GUID_INDEX__[guid]
-            elif name is None:
+            if name is None:
                 raise DeviceGuidNotFoundError(cls, guid)
 
         if name is not None:
@@ -272,16 +282,13 @@ class PhysicalDevice(AbstractDevice, metaclass=AutoRegisteringPhysicalDevice):
                 devices = cls.__NAME_INDEX__[name]
                 if len(devices) > 1:
                     raise DeviceAmbiguousNameError(cls, name)
-                else:
-                    device = devices[0]
 
-                    # If we found it by (unique) name despite the fact that a guid was provided, this means we didn't
-                    # know about that guid before hand : update the device before returning it
-                    if guid is not None:
-                        device.guid = guid
+                # If we found it by (unique) name despite the fact that a guid was provided, this means we didn't
+                # know about that guid before hand : update the device before returning it
+                device = devices[0]
+                if guid is not None:
+                    device.guid = guid
 
-                    return device
-            else:
-                raise DeviceNameNotFoundError(cls, name)
-
+                return device
+            raise DeviceNameNotFoundError(cls, name)
         raise DeviceInvalidLookupError()
