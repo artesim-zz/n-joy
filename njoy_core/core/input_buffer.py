@@ -55,7 +55,7 @@ class InputBuffer(threading.Thread):
 
     def run(self):
         # First loop : receive inputs until we get a first full set
-        while len(self._state_queue) == 0:
+        while not self._state_queue:
             self.initial_loop()
 
         # Then start the actual event loop : now we only test for changes
@@ -65,6 +65,6 @@ class InputBuffer(threading.Thread):
     @property
     def state(self):
         # Blocking call : wait 100 µs between each read attempt, to give a chance for other threads to run
-        while len(self._state_queue) == 0:
+        while not self._state_queue:
             time.sleep(0.0001)
         return self._state_queue.pop()

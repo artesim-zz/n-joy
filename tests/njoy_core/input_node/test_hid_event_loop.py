@@ -1,3 +1,4 @@
+# pylint: skip-file
 #
 # WARNING:
 # Need to set PYSDL2_DLL_PATH=../../../lib64/sdl2 for this test

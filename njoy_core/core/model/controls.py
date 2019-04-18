@@ -40,7 +40,7 @@ class ControlError(Exception):
 
 class ControlInvalidDeviceError(ControlError):
     def __init__(self):
-        self.message = "dev must be a Device instance, or an alias of one"
+        super().__init__("dev must be a Device instance, or an alias of one")
 
 
 class ControlProgrammingError(ControlError):
@@ -69,12 +69,11 @@ class AutoRegisteringControl(type):
     def _find_device(dev):
         if isinstance(dev, str):
             return PhysicalDevice.find(alias=dev)
-        elif issubclass(dev.__class__, AbstractDevice):
+        if issubclass(dev.__class__, AbstractDevice):
             return dev
-        elif dev is not None:
+        if dev is not None:
             raise ControlInvalidDeviceError()
-        else:
-            return None
+        return None
 
 
 class AbstractControl(metaclass=AutoRegisteringControl):
@@ -87,14 +86,14 @@ class AbstractControl(metaclass=AutoRegisteringControl):
         self.input_controls = inputs
 
     def __repr__(self):
-        if self.is_assigned:
-            return '<{} /{:02d}/{:02d}/{}/{:02d}>'.format(self.__class__.__name__,
-                                                          self.dev.node.id,
-                                                          self.dev.id,
-                                                          self.__class__.__name__.lower(),
-                                                          self.id)
-        else:
+        if not self.is_assigned:
             return '<Unassigned {}>'.format(self.__class__.__name__)
+
+        return '<{} /{:02d}/{:02d}/{}/{:02d}>'.format(self.__class__.__name__,
+                                                      self.dev.node.id,
+                                                      self.dev.id,
+                                                      self.__class__.__name__.lower(),
+                                                      self.id)
 
     def __hash__(self):
         if self.dev is None:
@@ -102,17 +101,18 @@ class AbstractControl(metaclass=AutoRegisteringControl):
                          hash(self.input_controls),
                          id(self.processor),
                          self.id))
-        elif self.dev.node is None:
+
+        if self.dev.node is None:
             return hash((self.__class__.__name__,
                          hash(self.input_controls),
                          id(self.processor),
                          self.dev.id,
                          self.id))
-        else:
-            return hash((self.__class__.__name__,
-                         self.dev.node.id,
-                         self.dev.id,
-                         self.id))
+
+        return hash((self.__class__.__name__,
+                     self.dev.node.id,
+                     self.dev.id,
+                     self.id))
 
     @property
     def is_assigned(self):
