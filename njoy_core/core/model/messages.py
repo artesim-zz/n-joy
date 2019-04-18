@@ -1,3 +1,4 @@
+"""Central module for all zmq message definitions."""
 import enum
 import pickle
 import struct
@@ -89,40 +90,41 @@ class ControlEvent:
         self.value = value
 
     def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.control == other.control and self.value == other.value
-        else:
+        if not isinstance(other, self.__class__):
             return NotImplemented
+        return self.control == other.control and self.value == other.value
 
     @classmethod
     def mk_identity(cls, control):
         if not isinstance(control, AbstractControl):
             raise MessageIdentityError("Invalid control class.")
 
-        elif not control.is_assigned:
+        if not control.is_assigned:
             raise MessageIdentityError("Cannot make a socket identity out of unassigned controls.")
 
-        elif isinstance(control, Axis):
+        if isinstance(control, Axis):
             return cls.__IDENTITY_PACKER.pack((control.dev.node.id & 0xF) << 12 |
                                               (control.dev.id & 0xF) << 8 |
                                               0x80 |
                                               (control.id & 0x07))
-        elif isinstance(control, Button):
+        if isinstance(control, Button):
             return cls.__IDENTITY_PACKER.pack((control.dev.node.id & 0xF) << 12 |
                                               (control.dev.id & 0xF) << 8 |
                                               (control.id & 0x7F))
-        elif isinstance(control, Hat):
+        if isinstance(control, Hat):
             return cls.__IDENTITY_PACKER.pack((control.dev.node.id & 0xF) << 12 |
                                               (control.dev.id & 0xF) << 8 |
                                               0xC0 |
                                               (control.id & 0x03))
 
+        raise MessageIdentityError("Invalid control class.")
+
     def _serialize_control(self):
         if self.control is None:
             return []
-        else:
-            # Adding an empty frame for compatibility with the REQ sockets, when used with a ROUTER socket
-            return [self.mk_identity(self.control), b'']
+
+        # Adding an empty frame for compatibility with the REQ sockets, when used with a ROUTER socket
+        return [self.mk_identity(self.control), b'']
 
     def _serialize_value(self):
         if self.value is None:
@@ -131,14 +133,13 @@ class ControlEvent:
         if isinstance(self.control, Axis) or isinstance(self.value, float):
             return self.__AXIS_VALUE_PACKER__.pack(self.value)
 
-        elif isinstance(self.control, Button) or isinstance(self.value, bool):
+        if isinstance(self.control, Button) or isinstance(self.value, bool):
             return self.__BUTTON_VALUE_PACKER__.pack(self.value)
 
-        elif isinstance(self.control, Hat) or (isinstance(self.value, int) and (0x00 <= self.value <= 0x0F)):
+        if isinstance(self.control, Hat) or (isinstance(self.value, int) and (0x00 <= self.value <= 0x0F)):
             return self.__HAT_VALUE_PACKER__.pack(self.value | 0x80)
 
-        else:
-            raise MessageError("Cannot serialize value : {}".format(self.value))
+        raise MessageError("Cannot serialize value : {}".format(self.value))
 
     def send(self, socket):
         msg_parts = self._serialize_control()
@@ -149,16 +150,16 @@ class ControlEvent:
     def _control_class_from_value(cls, value):
         if isinstance(value, float):
             return Axis
-        elif isinstance(value, bool):
+        if isinstance(value, bool):
             return Button
-        elif isinstance(value, int) and value in HatState.set():
+        if isinstance(value, int) and value in HatState.set():
             return Hat
-        else:
-            return None
+        return None
 
     @classmethod
     def _deserialize_control(cls, control_frame):
         unpacked = cls.__IDENTITY_PACKER.unpack(control_frame)
+        # ControlEvent is Abstract class, __DEV_CLASS__ must be defined by each subclass : pylint: disable=no-member
         dev = cls.__DEV_CLASS__.find(node=(unpacked[0] & 0xF000) >> 12,
                                      dev=(unpacked[0] & 0x0F00) >> 8)
         ctrl_grp = getattr(dev, cls.__CTRL_GROUP__[unpacked[0] & 0x00C0])
@@ -170,30 +171,30 @@ class ControlEvent:
         if value_frame == b'':
             return None  # Single-Frame 'Ready' signal
 
-        elif len(value_frame) == 8:
+        if len(value_frame) == 8:
             unpacked = cls.__AXIS_VALUE_PACKER__.unpack(value_frame)
             return unpacked[0]
 
-        elif len(value_frame) == 1 and value_frame[0] & 0x80 == 0x00:
+        if len(value_frame) == 1 and value_frame[0] & 0x80 == 0x00:
             unpacked = cls.__BUTTON_VALUE_PACKER__.unpack(value_frame)
             return unpacked[0]
 
-        elif len(value_frame) == 1 and value_frame[0] & 0x80 == 0x80:
+        if len(value_frame) == 1 and value_frame[0] & 0x80 == 0x80:
             unpacked = cls.__HAT_VALUE_PACKER__.unpack(value_frame)
             return unpacked[0] & 0x0F
 
-        else:
-            raise MessageError("Cannot deserialize value frame : {}".format(value_frame))
+        raise MessageError("Cannot deserialize value frame : {}".format(value_frame))
 
     @classmethod
     def _deserialize(cls, frames):
         if len(frames) == 3 and len(frames[0]) == 2 and frames[1] == b'':
             return {'control': cls._deserialize_control(frames[0]),
                     'value': cls._deserialize_value(frames[2])}
-        elif len(frames) == 1:
+
+        if len(frames) == 1:
             return {'value': cls._deserialize_value(frames[0])}
-        else:
-            raise MessageError("Cannot deserialize frames : {}".format(frames))
+
+        raise MessageError("Cannot deserialize frames : {}".format(frames))
 
     @classmethod
     def recv(cls, socket):
@@ -217,15 +218,17 @@ class CoreRequest:
     def _encoded_string(string):
         if isinstance(string, str):
             return string.encode('utf-8')
-        elif isinstance(string, bytes):
+        if isinstance(string, bytes):
             return string
+        raise MessageError("Cannot encode string : {}".format(string))
 
     @staticmethod
     def _decoded_string(string):
         if isinstance(string, str):
             return string
-        elif isinstance(string, bytes):
+        if isinstance(string, bytes):
             return string.decode('utf-8')
+        raise MessageError("Cannot decode string : {}".format(string))
 
     def send(self, socket):
         socket.send_multipart([self._encoded_string(self.command)] +
@@ -238,14 +241,13 @@ class CoreRequest:
         payload = [pickle.loads(frame) for frame in frames[1:]]
         if command == 'register':
             return InputNodeRegisterRequest(available_devices=payload)
-        elif command == 'registered':
+        if command == 'registered':
             return InputNodeRegisterReply(node=payload[0])
-        elif command == 'capabilities':
+        if command == 'capabilities':
             return OutputNodeCapabilities(capabilities=payload)
-        elif command == 'assignments':
+        if command == 'assignments':
             return OutputNodeAssignments(node=payload[0])
-        else:
-            return cls(command=command, payload=payload)
+        return cls(command=command, payload=payload)
 
 
 class InputNodeRegisterRequest(CoreRequest):
