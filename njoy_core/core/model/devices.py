@@ -120,7 +120,7 @@ class AbstractDevice:
 
     def __init__(self, *args, **kwargs):  # pylint: disable=unused-argument
         self.node = None  # Automatically set by the node it is assigned to
-        self.id = None  # Automatically set by the node it is assigned to # pylint: disable=invalid-name
+        self.id = None  # Automatically set by the node it is assigned to
         self.axes = dict()
         self.buttons = dict()
         self.hats = dict()

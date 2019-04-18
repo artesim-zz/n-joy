@@ -1,14 +1,15 @@
-import sdl2
-import sdl2.ext
 import time
 
-from .sdl_joystick import SDLJoystick
+import sdl2
+import sdl2.ext
+
 from njoy_core.core.model import InputNodeRegisterRequest, InputNodeRegisterReply, PhysicalControlEvent
+
+from .sdl_joystick import SDLJoystick
 
 
 class HidEventLoopException(Exception):
     """Top-level class for all exceptions raised from this module."""
-    pass
 
 
 class HidEventLoopQuit(HidEventLoopException):
@@ -67,7 +68,7 @@ class HidEventLoop:
             if event.type == sdl2.SDL_QUIT:
                 raise HidEventLoopQuit()
 
-            elif event.type == sdl2.SDL_JOYAXISMOTION:
+            if event.type == sdl2.SDL_JOYAXISMOTION:
                 device = self._devices[event.jaxis.which]['njoy_device']
                 if event.jaxis.axis in device.axes:
                     PhysicalControlEvent(control=device.axes[event.jaxis.axis],

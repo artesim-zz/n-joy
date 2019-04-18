@@ -23,18 +23,18 @@ class NodeError(Exception):
 
 class NodeOverflowError(NodeError):
     def __init__(self, node_class):
-        self.message = "Reached max number of {} (max {})".format(node_class.__name__, node_class.__MAX_NODES__)
+        super().__init__("Reached max number of {} (max {})".format(node_class.__name__, node_class.__MAX_NODES__))
 
 
 class NodeDeviceOverflowError(NodeError):
     def __init__(self, node):
-        self.message = "Reached max number of devices for {} (max {})".format(node.__class__.__name__,
-                                                                              node.__MAX_DEVICES__)
+        super().__init__("Reached max number of devices for {} (max {})".format(node.__class__.__name__,
+                                                                                node.__MAX_DEVICES__))
 
 
 class NodeNotFoundError(NodeError):
     def __init__(self, node_class, node):
-        self.message = "No existing {} with id {}".format(node_class.__name__, node)
+        super().__init__("No existing {} with id {}".format(node_class.__name__, node))
 
 
 class AutoIndexingNode(abc.ABCMeta):
@@ -56,10 +56,9 @@ class AbstractNode(collections.MutableSequence, metaclass=AutoIndexingNode):
 
     @classmethod
     def find(cls, *, node):
-        if node < len(cls.__NODES__[cls]):
-            return cls.__NODES__[cls][node]
-        else:
+        if node >= len(cls.__NODES__[cls]):
             raise NodeNotFoundError(cls, node)
+        return cls.__NODES__[cls][node]
 
     def __init__(self):
         self._devices = list()

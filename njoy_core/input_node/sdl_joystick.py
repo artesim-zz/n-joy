@@ -54,10 +54,11 @@ class SDLJoystick:
 
     @staticmethod
     def device_list(exclude_list=None):
+        excluded_names = set(exclude_list) if exclude_list is not None else set()
         return [(bytes(guid.data), name)
                 for guid, name in [(SDLJoystick.device_guid(i), SDLJoystick.device_name(i))
                                    for i in range(SDLJoystick.nb_joysticks())]
-                if name not in (set(exclude_list) if exclude_list is not None else set())]
+                if name not in excluded_names]
 
     @staticmethod
     def to_guid_hex_str(guid):

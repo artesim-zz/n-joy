@@ -70,11 +70,11 @@ class VirtualJoystick(threading.Thread):
     def device_capabilities(cls, device_id=None):
         if device_id is None:
             return [cls.device_capabilities(i) for i in range(vjoy_device.VJoyDevice.nb_devices())]
-        else:
-            return {'device_id': device_id,
-                    'max_nb_axes': cls.__MAX_NB_AXES__,
-                    'max_nb_buttons': cls.__MAX_NB_BUTTONS__,
-                    'max_nb_hats': cls.__MAX_NB_HATS__}
+
+        return {'device_id': device_id,
+                'max_nb_axes': cls.__MAX_NB_AXES__,
+                'max_nb_buttons': cls.__MAX_NB_BUTTONS__,
+                'max_nb_hats': cls.__MAX_NB_HATS__}
 
     def __init__(self, device, context, events_endpoint):
         super().__init__(name="/virtual_joysticks/{}".format(device.id))

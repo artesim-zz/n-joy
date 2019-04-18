@@ -1,6 +1,7 @@
+"""Parser for *.njoy-device-map files"""
 import glob
-import lark
 import os
+import lark
 
 
 __BASE_DEVICE_MAPS_DIR__ = os.path.join(os.path.dirname(__file__),
@@ -42,23 +43,24 @@ class DeviceMapException(Exception):
 
 
 class DeviceMapParser(lark.Transformer):
+    """The main transformer class, to convert the lark parse tree into a dictionary suitable for the nJoy core"""
     start = list
 
     @lark.v_args(inline=True)
-    def device(self, name, controls):
+    def device(self, name, controls):  # pylint: disable=no-self-use
         return {
             'name': name,
             'controls': controls
         }
 
     @lark.v_args(inline=True)
-    def name(self, name):
+    def name(self, name):  # pylint: disable=no-self-use
         return str(name[1:-1])
 
     controls = list
 
     @lark.v_args(inline=True)
-    def axis(self, _id, aliases):
+    def axis(self, _id, aliases):  # pylint: disable=no-self-use
         return {
             'type': 'axis',
             'id': _id,
@@ -66,7 +68,7 @@ class DeviceMapParser(lark.Transformer):
         }
 
     @lark.v_args(inline=True)
-    def button(self, _id, aliases):
+    def button(self, _id, aliases):  # pylint: disable=no-self-use
         return {
             'type': 'button',
             'id': _id,
@@ -74,7 +76,7 @@ class DeviceMapParser(lark.Transformer):
         }
 
     @lark.v_args(inline=True)
-    def pseudo_button(self, neither_ids, aliases):
+    def pseudo_button(self, neither_ids, aliases):  # pylint: disable=no-self-use
         return {
             'type': 'pseudo_button',
             'neither_ids': neither_ids,
@@ -82,7 +84,7 @@ class DeviceMapParser(lark.Transformer):
         }
 
     @lark.v_args(inline=True)
-    def hat(self, _id, aliases):
+    def hat(self, _id, aliases):  # pylint: disable=no-self-use
         return {
             'type': 'hat',
             'id': _id,
@@ -90,7 +92,7 @@ class DeviceMapParser(lark.Transformer):
         }
 
     @lark.v_args(inline=True)
-    def hat_direction(self, _id, direction, aliases):
+    def hat_direction(self, _id, direction, aliases):  # pylint: disable=no-self-use
         return {
             'type': 'hat_direction',
             'id': _id,
@@ -99,7 +101,7 @@ class DeviceMapParser(lark.Transformer):
         }
 
     @lark.v_args(inline=True)
-    def id(self, _id):
+    def id(self, _id):  # pylint: disable=no-self-use
         return int(_id)
 
     @staticmethod
@@ -107,7 +109,7 @@ class DeviceMapParser(lark.Transformer):
         return [int(i) for i in ids]
 
     @lark.v_args(inline=True)
-    def direction(self, direction):
+    def direction(self, direction):  # pylint: disable=no-self-use
         return str(direction)
 
     @staticmethod
