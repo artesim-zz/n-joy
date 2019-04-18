@@ -1,3 +1,4 @@
+# pylint: disable=line-too-long,missing-docstring
 from setuptools import setup
 
 setup(

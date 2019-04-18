@@ -1,0 +1,8 @@
+# Set the default behavior, in case people don't have core.autocrlf set.
+* text=auto
+
+*.md  text eol=lf
+*.py  text eol=lf
+
+*.njoy-device-map text eol=lf
+*.njoy-design     text eol=lf
