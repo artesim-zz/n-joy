@@ -1,3 +1,4 @@
+# pylint: skip-file
 import pytest
 
 from njoy_core.core.model import InputNode, OutputNode

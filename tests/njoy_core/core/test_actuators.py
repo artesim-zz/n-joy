@@ -1,3 +1,4 @@
+# pylint: skip-file
 import unittest.mock as mock
 import pytest
 import zmq
